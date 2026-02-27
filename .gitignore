@@ -1,0 +1,30 @@
+# MahsaBot - Git Ignore
+
+# Configuration (contains secrets)
+config.php
+
+# Runtime
+lib/phpqrcode/cache/
+lib/phpqrcode/temp/
+cookies/
+*.cookie
+
+# Backups
+backups/
+*.sql.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+error_log

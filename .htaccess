@@ -1,0 +1,46 @@
+# MahsaBot - Apache Security Configuration
+
+# Deny direct access to all PHP files except entry points
+<Files "*.php">
+    Require all denied
+</Files>
+
+# Allow bot.php (webhook entry)
+<Files "bot.php">
+    Require all granted
+</Files>
+
+# Deny all access to sensitive directories
+<DirectoryMatch "(core|handlers|panels|setup|services|locale|lib)">
+    Require all denied
+</DirectoryMatch>
+
+# Allow subscription endpoint
+<Files "services/subscription.php">
+    Require all granted
+</Files>
+
+# Allow gateway endpoints
+<DirectoryMatch "gateway">
+    <Files "*.php">
+        Require all granted
+    </Files>
+</DirectoryMatch>
+
+# Allow web directory
+<DirectoryMatch "web">
+    <Files "*">
+        Require all granted
+    </Files>
+</DirectoryMatch>
+
+# Deny access to config and sensitive files
+<FilesMatch "(config\.php|config\.sample\.php|\.gitignore|\.htaccess|backup\.sh|mahsabot\.sh)$">
+    Require all denied
+</FilesMatch>
+
+# Disable directory listing
+Options -Indexes
+
+# Prevent access to .git directory
+RedirectMatch 404 /\.git

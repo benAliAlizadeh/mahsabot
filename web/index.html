@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MahsaBot - ربات مدیریت سرویس VPN</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0a0a1a;
+            --bg-card: #12122a;
+            --bg-hover: #1a1a3e;
+            --accent: #6c5ce7;
+            --accent-light: #a29bfe;
+            --success: #00cec9;
+            --text: #e0e0f0;
+            --text-muted: #7878a0;
+            --border: rgba(108, 92, 231, 0.15);
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(108,92,231,.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(108,92,231,.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            z-index: 0;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        header {
+            text-align: center;
+            padding: 60px 0 40px;
+        }
+        
+        .logo {
+            font-size: 56px;
+            margin-bottom: 16px;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            background: linear-gradient(135deg, var(--accent-light), var(--success));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+        
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+            margin: 50px 0;
+        }
+        
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 28px 24px;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            background: var(--bg-hover);
+            transform: translateY(-4px);
+            border-color: var(--accent);
+            box-shadow: 0 12px 40px rgba(108, 92, 231, 0.15);
+        }
+        
+        .feature-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+        
+        .feature-card h3 {
+            font-size: 1.1em;
+            margin-bottom: 8px;
+            color: var(--accent-light);
+        }
+        
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        
+        .cta {
+            text-align: center;
+            margin: 40px 0;
+        }
+        
+        .cta-btn {
+            display: inline-block;
+            padding: 16px 48px;
+            background: linear-gradient(135deg, var(--accent), #5f3dc4);
+            color: #fff;
+            text-decoration: none;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 8px 30px rgba(108, 92, 231, 0.3);
+        }
+        
+        .cta-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 40px rgba(108, 92, 231, 0.5);
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 50px 0;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-num {
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--success);
+        }
+        
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.85em;
+            margin-top: 4px;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            color: var(--text-muted);
+            font-size: 0.85em;
+            border-top: 1px solid var(--border);
+        }
+        
+        footer a { color: var(--accent-light); text-decoration: none; }
+        
+        @media (max-width: 600px) {
+            h1 { font-size: 1.8em; }
+            .features { grid-template-columns: 1fr; }
+            .stats { gap: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+    
+    <div class="container">
+        <header>
+            <div class="logo">🤖</div>
+            <h1>MahsaBot</h1>
+            <p class="subtitle">ربات هوشمند مدیریت و فروش سرویس VPN<br>با پشتیبانی از پنل‌های مختلف و درگاه‌های متنوع پرداخت</p>
+        </header>
+        
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">🌐</div>
+                <h3>پنل‌های متنوع</h3>
+                <p>پشتیبانی از Marzban، Sanaei، Alireza، Vaxilu و Niduka X-UI</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💳</div>
+                <h3>درگاه‌های پرداخت</h3>
+                <p>زرین‌پال، NextPay، NowPayments، ترون (TRX) و کارت به کارت</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔐</div>
+                <h3>پروتکل‌های پیشرفته</h3>
+                <p>VMess، VLess، Trojan با شبکه‌های WS، TCP، gRPC و Reality</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">👔</div>
+                <h3>سیستم نمایندگی</h3>
+                <p>پنل نمایندگان با تخفیف اختصاصی و خرید عمده</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>گزارشات جامع</h3>
+                <p>آمار فروش، درآمد، کاربران و گزارش خودکار روزانه</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎫</div>
+                <h3>پشتیبانی تیکتی</h3>
+                <p>سیستم تیکت داخلی برای ارتباط مستقیم با کاربران</p>
+            </div>
+        </div>
+        
+        <div class="cta">
+            <a href="#" class="cta-btn" id="botLink">🚀 ورود به ربات</a>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-num" id="statUsers">-</div>
+                <div class="stat-label">کاربر فعال</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num" id="statServices">-</div>
+                <div class="stat-label">سرویس فعال</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-num">99.9%</div>
+                <div class="stat-label">آپتایم</div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>ساخته شده با ❤️ توسط <a href="#">MahsaBot Team</a></p>
+            <p style="margin-top: 8px">© 2024 MahsaBot - تمامی حقوق محفوظ است</p>
+        </footer>
+    </div>
+    
+    <script>
+        // Bot link placeholder - replace with actual bot username
+        const botLink = document.getElementById('botLink');
+        botLink.href = 'https://t.me/YOUR_BOT_USERNAME';
+    </script>
+</body>
+</html>
