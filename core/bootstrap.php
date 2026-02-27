@@ -7,10 +7,15 @@
  * @version 1.0.0
  */
 
-// Load configuration
-$configPath = __DIR__ . '/../app.conf.php';
+// Load configuration (primary: config.php, fallback: app.conf.php)
+$configPath = __DIR__ . '/../config.php';
 if (!file_exists($configPath)) {
-    die('MahsaBot: Configuration file not found. Run the installer first.');
+    $legacyPath = __DIR__ . '/../app.conf.php';
+    if (file_exists($legacyPath)) {
+        $configPath = $legacyPath;
+    } else {
+        die('MahsaBot: Configuration file not found. Run the installer first.');
+    }
 }
 require_once $configPath;
 

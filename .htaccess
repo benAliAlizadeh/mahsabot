@@ -1,46 +1,15 @@
-# MahsaBot - Apache Security Configuration
+# MahsaBot - minimal .htaccess safeguards
 
-# Deny direct access to all PHP files except entry points
-<Files "*.php">
-    Require all denied
-</Files>
+Options -Indexes
 
-# Allow bot.php (webhook entry)
-<Files "bot.php">
-    Require all granted
-</Files>
-
-# Deny all access to sensitive directories
-<DirectoryMatch "(core|handlers|panels|setup|services|locale|lib)">
-    Require all denied
-</DirectoryMatch>
-
-# Allow subscription endpoint
-<Files "services/subscription.php">
-    Require all granted
-</Files>
-
-# Allow gateway endpoints
-<DirectoryMatch "gateway">
-    <Files "*.php">
-        Require all granted
-    </Files>
-</DirectoryMatch>
-
-# Allow web directory
-<DirectoryMatch "web">
-    <Files "*">
-        Require all granted
-    </Files>
-</DirectoryMatch>
-
-# Deny access to config and sensitive files
-<FilesMatch "(config\.php|config\.sample\.php|\.gitignore|\.htaccess|backup\.sh|mahsabot\.sh)$">
+# Block direct access to sensitive root files
+<FilesMatch "^(config\.php|config\.sample\.php|backup\.sh|mahsabot\.sh|README(\-fa)?\.md|LICENSE)$">
     Require all denied
 </FilesMatch>
 
-# Disable directory listing
-Options -Indexes
-
-# Prevent access to .git directory
-RedirectMatch 404 /\.git
+# Protect hidden paths but keep Let's Encrypt challenge reachable
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+    RewriteRule (^|/)\.git - [F,L]
+</IfModule>

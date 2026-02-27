@@ -12,6 +12,7 @@ define('ESI_ADMIN_ID', 0);
 define('ESI_BOT_USERNAME', '');
 define('ESI_BOT_URL', ''); // https://yourdomain.com/
 define('ESI_BOT_DOMAIN', ''); // yourdomain.com
+define('ESI_WEBHOOK_SECURITY', 'proxy'); // off | strict | proxy
 
 // Timezone
 date_default_timezone_set('Asia/Tehran');

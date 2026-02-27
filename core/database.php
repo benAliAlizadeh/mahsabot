@@ -65,38 +65,143 @@ function esi_set_temp(mysqli $db, int $userId, string $data = ''): bool {
 }
 
 /**
- * Get bot options from settings table
+ * Decode JSON object/array option payload safely.
+ */
+function esi_decode_option_json(?string $raw): array {
+    if ($raw === null || $raw === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+/**
+ * Build compatibility aliases for legacy option keys.
+ */
+function esi_apply_option_aliases(array $options, string $groupKey): array {
+    if ($groupKey === 'BOT_CONFIG') {
+        if (!isset($options['lockChannel']) && !empty($options['channelId'])) {
+            $options['lockChannel'] = (string)$options['channelId'];
+        }
+        if (!isset($options['requirePhone']) && isset($options['phoneLock'])) {
+            $options['requirePhone'] = (string)$options['phoneLock'];
+        }
+        if (!isset($options['custom_plan_enabled']) && isset($options['customPlanActive'])) {
+            $options['custom_plan_enabled'] = (string)$options['customPlanActive'];
+        }
+        if (!isset($options['switch_location_enabled']) && isset($options['switchLocationActive'])) {
+            $options['switch_location_enabled'] = (string)$options['switchLocationActive'];
+        }
+        if (!isset($options['test_account_enabled']) && isset($options['testAccount'])) {
+            $options['test_account_enabled'] = (string)$options['testAccount'];
+        }
+        if (!isset($options['botActive'])) {
+            $options['botActive'] = 'on';
+        }
+    }
+
+    if ($groupKey === 'GATEWAY_KEYS') {
+        if (!isset($options['cart_card_number']) && isset($options['bankAccount'])) {
+            $options['cart_card_number'] = (string)$options['bankAccount'];
+        }
+        if (!isset($options['cart_card_holder']) && isset($options['holderName'])) {
+            $options['cart_card_holder'] = (string)$options['holderName'];
+        }
+        if (!isset($options['tron_wallet_address']) && isset($options['tronwallet'])) {
+            $options['tron_wallet_address'] = (string)$options['tronwallet'];
+        }
+        if (!isset($options['zarinpal_merchant'])) {
+            if (isset($options['zarinpal'])) {
+                $options['zarinpal_merchant'] = (string)$options['zarinpal'];
+            } elseif (isset($options['zarinpalKey'])) {
+                $options['zarinpal_merchant'] = (string)$options['zarinpalKey'];
+            }
+        }
+        if (!isset($options['nextpay_api_key'])) {
+            if (isset($options['nextpay'])) {
+                $options['nextpay_api_key'] = (string)$options['nextpay'];
+            } elseif (isset($options['nextpayKey'])) {
+                $options['nextpay_api_key'] = (string)$options['nextpayKey'];
+            }
+        }
+        if (!isset($options['nowpay_api_key'])) {
+            if (isset($options['nowpayment'])) {
+                $options['nowpay_api_key'] = (string)$options['nowpayment'];
+            } elseif (isset($options['nowpayKey'])) {
+                $options['nowpay_api_key'] = (string)$options['nowpayKey'];
+            }
+        }
+        if (!isset($options['tron_usdt_rate']) && isset($options['TRXRate']) && (float)$options['TRXRate'] > 0) {
+            $options['tron_usdt_rate'] = (string)$options['TRXRate'];
+        }
+    }
+
+    return $options;
+}
+
+/**
+ * Get bot options from settings table.
+ * Supports both grouped JSON rows and legacy flat option rows.
  */
 function esi_get_options(mysqli $db, string $key): array {
-    $stmt = $db->prepare("SELECT `payload` FROM `esi_options` WHERE `option_key` = ?");
+    $stmt = $db->prepare("SELECT `option_value` FROM `esi_options` WHERE `option_key` = ?");
     $stmt->bind_param('s', $key);
     $stmt->execute();
     $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-    if ($row && !empty($row['payload'])) {
-        return json_decode($row['payload'], true) ?? [];
+
+    $grouped = esi_decode_option_json($row['option_value'] ?? null);
+    if (!empty($grouped)) {
+        return esi_apply_option_aliases($grouped, $key);
     }
-    return [];
+
+    if (!in_array($key, ['BOT_CONFIG', 'GATEWAY_KEYS'], true)) {
+        return [];
+    }
+
+    $rows = esi_fetch_all($db, "SELECT `option_key`, `option_value` FROM `esi_options`");
+    $options = [];
+
+    foreach ($rows as $r) {
+        $optKey = (string)($r['option_key'] ?? '');
+        $optVal = (string)($r['option_value'] ?? '');
+        if ($optKey === '') {
+            continue;
+        }
+
+        if (in_array($optKey, ['BOT_CONFIG', 'GATEWAY_KEYS'], true)) {
+            $decoded = esi_decode_option_json($optVal);
+            if (!empty($decoded)) {
+                $options = array_merge($options, $decoded);
+            }
+            continue;
+        }
+
+        $options[$optKey] = $optVal;
+    }
+
+    return esi_apply_option_aliases($options, $key);
 }
 
 /**
- * Save bot options to settings table
+ * Save grouped options to settings table.
  */
 function esi_save_options(mysqli $db, string $key, array $data): bool {
-    $payload = json_encode($data, JSON_UNESCAPED_UNICODE);
+    $optionValue = json_encode($data, JSON_UNESCAPED_UNICODE);
     $stmt = $db->prepare("SELECT `id` FROM `esi_options` WHERE `option_key` = ?");
     $stmt->bind_param('s', $key);
     $stmt->execute();
     $exists = $stmt->get_result()->num_rows > 0;
     $stmt->close();
-    
+
     if ($exists) {
-        $stmt = $db->prepare("UPDATE `esi_options` SET `payload` = ? WHERE `option_key` = ?");
-        $stmt->bind_param('ss', $payload, $key);
+        $stmt = $db->prepare("UPDATE `esi_options` SET `option_value` = ? WHERE `option_key` = ?");
+        $stmt->bind_param('ss', $optionValue, $key);
     } else {
-        $stmt = $db->prepare("INSERT INTO `esi_options` (`option_key`, `payload`) VALUES (?, ?)");
-        $stmt->bind_param('ss', $key, $payload);
+        $stmt = $db->prepare("INSERT INTO `esi_options` (`option_key`, `option_value`) VALUES (?, ?)");
+        $stmt->bind_param('ss', $key, $optionValue);
     }
+
     $result = $stmt->execute();
     $stmt->close();
     return $result;

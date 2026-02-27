@@ -356,7 +356,7 @@ if (preg_match('/^delCustomBtn(\d+)/', $data, $m)) {
 if (preg_match('/^customBtn(\d+)/', $data, $m)) {
     $row = esi_fetch_one($db, "SELECT * FROM `esi_options` WHERE `id` = ?", 'i', (int)$m[1]);
     if ($row) {
-        $content = json_decode($row['payload'], true)['content'] ?? '';
+        $content = json_decode($row['option_value'] ?? '{}', true)['content'] ?? '';
         $keys = json_encode(['inline_keyboard' => [
             [['text' => $btn['go_back'], 'callback_data' => 'mainMenu']],
         ]]);

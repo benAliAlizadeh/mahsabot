@@ -9,8 +9,10 @@
 
 require_once __DIR__ . '/core/bootstrap.php';
 
-// Security: Validate request comes from Telegram
-if (php_sapi_name() !== 'cli' && !validate_telegram_ip()) {
+// Security: Validate request comes from Telegram (mode-aware)
+$ipValidationReason = '';
+if (php_sapi_name() !== 'cli' && !validate_telegram_ip($ipValidationReason)) {
+    error_log('MahsaBot webhook denied: ' . $ipValidationReason . ' remote=' . ($_SERVER['REMOTE_ADDR'] ?? ''));
     http_response_code(403);
     exit('Access denied');
 }

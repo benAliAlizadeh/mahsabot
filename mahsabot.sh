@@ -1,134 +1,212 @@
-#!/bin/bash
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║                    MahsaBot Installer v1.0                        ║
-# ║          Telegram VPN Subscription Management Bot               ║
-# ║                   github.com/benAliAlizadeh/mahsabot                    ║
-# ╚══════════════════════════════════════════════════════════════════╝
+#!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-CYAN='\033[0;36m'
 NC='\033[0m'
-BOLD='\033[1m'
 
 INSTALL_DIR="/var/www/mahsabot"
 DB_NAME="mahsabot_db"
 DB_USER="mahsabot_user"
+REPO_URL="https://github.com/benAliAlizadeh/mahsabot.git"
+ARCHIVE_URL="https://github.com/benAliAlizadeh/mahsabot/archive/refs/heads/main.zip"
+
+BOT_TOKEN=""
+ADMIN_ID=""
+BOT_USERNAME=""
+BOT_DOMAIN=""
+BOT_URL=""
+DB_PASS=""
 
 print_banner() {
     clear
-    echo -e "${CYAN}"
-    echo "  ╔══════════════════════════════════════╗"
-    echo "  ║         🤖 MahsaBot Installer          ║"
-    echo "  ║     VPN Subscription Bot v1.0        ║"
-    echo "  ╚══════════════════════════════════════╝"
-    echo -e "${NC}"
+    echo "=============================================================="
+    echo "                       MahsaBot Installer"
+    echo "             Telegram VPN Subscription Management"
+    echo "              github.com/benAliAlizadeh/mahsabot"
+    echo "=============================================================="
     echo ""
 }
 
-log_info()  { echo -e "${GREEN}[✓]${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
-log_error() { echo -e "${RED}[✗]${NC} $1"; }
-log_step()  { echo -e "\n${BLUE}${BOLD}━━━ $1 ━━━${NC}\n"; }
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_step() {
+    echo ""
+    echo -e "${BLUE}==> $1${NC}"
+    echo ""
+}
+
+abort() {
+    log_error "$1"
+    exit 1
+}
 
 check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log_error "این اسکریپت باید با دسترسی root اجرا شود"
-        echo "sudo bash mahsabot.sh"
-        exit 1
+    if [[ "${EUID}" -ne 0 ]]; then
+        abort "This script must run as root. Use: sudo bash mahsabot.sh"
     fi
 }
 
 check_os() {
-    if ! grep -qi 'ubuntu\|debian' /etc/os-release 2>/dev/null; then
-        log_warn "این اسکریپت برای Ubuntu/Debian بهینه شده. ممکن است روی توزیع‌های دیگر مشکل داشته باشد."
+    if [[ ! -f /etc/os-release ]]; then
+        log_warn "Cannot verify operating system."
+        return
     fi
+    if ! grep -qiE 'ubuntu|debian' /etc/os-release; then
+        log_warn "This installer is optimized for Ubuntu/Debian."
+    fi
+}
+
+read_non_empty() {
+    local prompt="$1"
+    local value=""
+    while [[ -z "${value}" ]]; do
+        read -r -p "${prompt}" value
+    done
+    echo "${value}"
+}
+
+sanitize_domain() {
+    local raw="$1"
+    raw="${raw#http://}"
+    raw="${raw#https://}"
+    raw="${raw%%/*}"
+    echo "${raw}"
 }
 
 install_dependencies() {
-    log_step "نصب پیش‌نیازها"
-    
-    apt-get update -y > /dev/null 2>&1
-    log_info "لیست پکیج‌ها بروزرسانی شد"
-    
-    apt-get install -y apache2 mysql-server php php-mysql php-curl php-xml php-soap php-gd php-mbstring php-gmp php-bcmath unzip curl git certbot python3-certbot-apache > /dev/null 2>&1
-    log_info "Apache, MySQL, PHP و ماژول‌ها نصب شد"
-    
+    log_step "Installing dependencies"
+
+    apt-get update -y
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        apache2 mysql-server php php-mysql php-curl php-xml php-soap php-gd \
+        php-mbstring php-gmp php-bcmath unzip curl git certbot python3-certbot-apache
+
     systemctl enable apache2 mysql
     systemctl start apache2 mysql
-    log_info "سرویس‌ها فعال شدند"
+
+    log_info "Dependencies installed and services started."
 }
 
 setup_database() {
-    log_step "پیکربندی دیتابیس"
-    
-    echo -e "${CYAN}رمز عبور دیتابیس${NC} (برای کاربر $DB_USER):"
-    read -s DB_PASS
+    log_step "Configuring database"
+
+    read -r -s -p "Enter database password for ${DB_USER} (leave empty to auto-generate): " DB_PASS
     echo ""
-    
-    if [[ -z "$DB_PASS" ]]; then
-        DB_PASS=$(openssl rand -base64 16 | tr -d '=/+')
-        log_info "رمز عبور تصادفی ایجاد شد: ${YELLOW}${DB_PASS}${NC}"
-        log_warn "این رمز را ذخیره کنید!"
+
+    if [[ -z "${DB_PASS}" ]]; then
+        local chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        DB_PASS=""
+        for ((i = 0; i < 24; i++)); do
+            DB_PASS+="${chars:RANDOM % ${#chars}:1}"
+        done
+        log_warn "Generated database password: ${DB_PASS}"
+        log_warn "Save this password in a secure place."
     fi
-    
+
     mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
     mysql -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';"
     mysql -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';"
     mysql -e "FLUSH PRIVILEGES;"
-    
-    log_info "دیتابیس ${DB_NAME} و کاربر ${DB_USER} ایجاد شد"
+
+    log_info "Database and user are ready."
 }
 
 download_bot() {
-    log_step "دانلود فایل‌های ربات"
-    
-    if [[ -d "$INSTALL_DIR" ]]; then
-        log_warn "مسیر ${INSTALL_DIR} از قبل وجود دارد"
-        echo -e "آیا می‌خواهید بازنویسی شود؟ (y/N)"
-        read -r confirm
-        if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-            log_error "نصب لغو شد"
-            exit 1
+    log_step "Downloading MahsaBot files"
+
+    if [[ -d "${INSTALL_DIR}" ]]; then
+        log_warn "${INSTALL_DIR} already exists."
+        read -r -p "Overwrite existing installation? (y/N): " confirm
+        if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+            abort "Installation canceled by user."
         fi
-        rm -rf "$INSTALL_DIR"
+        rm -rf "${INSTALL_DIR}"
     fi
-    
-    git clone https://github.com/benAliAlizadeh/mahsabot.git "$INSTALL_DIR" 2>/dev/null || {
-        mkdir -p "$INSTALL_DIR"
-        log_warn "کلون از گیت ناموفق. فایل‌ها به صورت دستی کپی شوند."
-    }
-    
-    chown -R www-data:www-data "$INSTALL_DIR"
-    chmod -R 755 "$INSTALL_DIR"
-    log_info "فایل‌ها در ${INSTALL_DIR} نصب شد"
+
+    if git clone --depth 1 "${REPO_URL}" "${INSTALL_DIR}"; then
+        log_info "Repository cloned successfully."
+    else
+        log_warn "git clone failed. Trying GitHub archive fallback."
+
+        local tmp_dir
+        tmp_dir="$(mktemp -d)"
+        if ! curl -fL "${ARCHIVE_URL}" -o "${tmp_dir}/main.zip"; then
+            rm -rf "${tmp_dir}"
+            abort "Failed to download repository archive."
+        fi
+        if ! unzip -q "${tmp_dir}/main.zip" -d "${tmp_dir}"; then
+            rm -rf "${tmp_dir}"
+            abort "Failed to extract repository archive."
+        fi
+        if [[ ! -d "${tmp_dir}/mahsabot-main" ]]; then
+            rm -rf "${tmp_dir}"
+            abort "Archive content is invalid."
+        fi
+
+        mkdir -p "${INSTALL_DIR}"
+        cp -a "${tmp_dir}/mahsabot-main/." "${INSTALL_DIR}/"
+        rm -rf "${tmp_dir}"
+        log_info "Archive fallback download succeeded."
+    fi
+
+    local required_files=(
+        "bot.php"
+        "core/bootstrap.php"
+        "setup/schema.php"
+        "config.sample.php"
+    )
+    local missing=0
+    for required_file in "${required_files[@]}"; do
+        if [[ ! -f "${INSTALL_DIR}/${required_file}" ]]; then
+            log_error "Missing required file: ${required_file}"
+            missing=1
+        fi
+    done
+    if [[ "${missing}" -ne 0 ]]; then
+        abort "Installation files are incomplete."
+    fi
+
+    chown -R www-data:www-data "${INSTALL_DIR}"
+    chmod -R 755 "${INSTALL_DIR}"
+    log_info "Project files are ready in ${INSTALL_DIR}."
 }
 
 configure_bot() {
-    log_step "پیکربندی ربات"
-    
-    echo -e "${CYAN}توکن ربات تلگرام:${NC}"
-    read -r BOT_TOKEN
-    
-    echo -e "${CYAN}آیدی عددی ادمین:${NC}"
-    read -r ADMIN_ID
-    
-    echo -e "${CYAN}نام کاربری ربات${NC} (بدون @):"
-    read -r BOT_USERNAME
-    
-    echo -e "${CYAN}دامنه سرور${NC} (مثال: example.com):"
-    read -r BOT_DOMAIN
-    
+    log_step "Writing bot configuration"
+
+    BOT_TOKEN="$(read_non_empty 'Enter Telegram Bot Token: ')"
+    ADMIN_ID="$(read_non_empty 'Enter Telegram Admin ID (numeric): ')"
+    if [[ ! "${ADMIN_ID}" =~ ^[0-9]+$ ]]; then
+        abort "Admin ID must be numeric."
+    fi
+    BOT_USERNAME="$(read_non_empty 'Enter Bot Username (without @): ')"
+
+    local raw_domain
+    raw_domain="$(read_non_empty 'Enter domain (example.com): ')"
+    BOT_DOMAIN="$(sanitize_domain "${raw_domain}")"
+    if [[ -z "${BOT_DOMAIN}" ]]; then
+        abort "Domain is invalid."
+    fi
+
     BOT_URL="https://${BOT_DOMAIN}/"
-    
-    # Create config.php
-    cat > "${INSTALL_DIR}/config.php" << PHPEOF
+
+    cat >"${INSTALL_DIR}/config.php" <<PHPEOF
 <?php
-// MahsaBot Configuration - Generated by installer
+// MahsaBot Configuration - generated by installer
 define('ESI_DB_HOST', 'localhost');
 define('ESI_DB_NAME', '${DB_NAME}');
 define('ESI_DB_USER', '${DB_USER}');
@@ -139,254 +217,421 @@ define('ESI_ADMIN_ID', ${ADMIN_ID});
 define('ESI_BOT_USERNAME', '${BOT_USERNAME}');
 define('ESI_BOT_URL', '${BOT_URL}');
 define('ESI_BOT_DOMAIN', '${BOT_DOMAIN}');
+define('ESI_WEBHOOK_SECURITY', 'proxy'); // off | strict | proxy
 
 date_default_timezone_set('Asia/Tehran');
 define('ESI_DEBUG', false);
 PHPEOF
 
-    log_info "فایل config.php ایجاد شد"
+    chown www-data:www-data "${INSTALL_DIR}/config.php"
+    chmod 640 "${INSTALL_DIR}/config.php"
+    log_info "config.php created."
 }
 
-setup_ssl() {
-    log_step "دریافت گواهی SSL"
-    
-    echo -e "آیا می‌خواهید SSL (Let's Encrypt) نصب شود؟ (Y/n)"
-    read -r ssl_confirm
-    
-    if [[ "$ssl_confirm" != "n" && "$ssl_confirm" != "N" ]]; then
-        echo -e "${CYAN}ایمیل${NC} (برای Let's Encrypt):"
-        read -r LE_EMAIL
-        
-        certbot --apache -d "$BOT_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" 2>/dev/null && {
-            log_info "گواهی SSL با موفقیت نصب شد"
-        } || {
-            log_warn "نصب SSL ناموفق بود. می‌توانید بعداً دستی نصب کنید."
-        }
+load_runtime_config() {
+    if [[ ! -r "${INSTALL_DIR}/config.php" ]]; then
+        abort "config.php not found in ${INSTALL_DIR}"
+    fi
+
+    BOT_TOKEN="$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_BOT_TOKEN;")"
+    BOT_URL="$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_BOT_URL;")"
+    BOT_DOMAIN="$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_BOT_DOMAIN;")"
+    DB_NAME="$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_DB_NAME;")"
+    DB_USER="$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_DB_USER;")"
+    DB_PASS="$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_DB_PASS;")"
+
+    if [[ -n "${BOT_URL}" && "${BOT_URL}" != */ ]]; then
+        BOT_URL="${BOT_URL}/"
     fi
 }
 
 configure_apache() {
-    log_step "پیکربندی Apache"
-    
-    cat > /etc/apache2/sites-available/mahsabot.conf << APEOF
+    log_step "Configuring Apache"
+
+    if [[ -z "${BOT_DOMAIN}" ]]; then
+        load_runtime_config
+    fi
+
+    cat >/etc/apache2/sites-available/mahsabot.conf <<APEOF
 <VirtualHost *:80>
     ServerName ${BOT_DOMAIN}
     DocumentRoot ${INSTALL_DIR}
-    
+
     <Directory ${INSTALL_DIR}>
         Options -Indexes +FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
-    
-    # Deny access to sensitive files
-    <FilesMatch "\.(php|sh|sql)$">
-        <If "%{REQUEST_URI} !~ m#^/(bot\.php|gateway/|services/subscription\.php|web/)#">
+
+    # Deny direct access to internal application layers
+    <DirectoryMatch "^${INSTALL_DIR}/(core|handlers|locale|panels|setup)/">
+        Require all denied
+    </DirectoryMatch>
+
+    # Only expose subscription endpoint under /services
+    <Directory ${INSTALL_DIR}/services>
+        <Files "subscription.php">
+            Require all granted
+        </Files>
+        <FilesMatch "^(?!subscription\\.php$).*\\.php$">
             Require all denied
-        </If>
+        </FilesMatch>
+    </Directory>
+
+    # Only expose gateway entry points
+    <Directory ${INSTALL_DIR}/gateway>
+        <FilesMatch "^(initiate|callback)\\.php$">
+            Require all granted
+        </FilesMatch>
+        <FilesMatch "^(?!initiate\\.php$|callback\\.php$).*\\.php$">
+            Require all denied
+        </FilesMatch>
+    </Directory>
+
+    # Deny common sensitive files
+    <FilesMatch "^(config\\.php|config\\.sample\\.php|backup\\.sh|mahsabot\\.sh|README(\\-fa)?\\.md|LICENSE)$">
+        Require all denied
     </FilesMatch>
-    
+
     ErrorLog \${APACHE_LOG_DIR}/mahsabot_error.log
     CustomLog \${APACHE_LOG_DIR}/mahsabot_access.log combined
 </VirtualHost>
 APEOF
 
-    a2ensite mahsabot.conf > /dev/null 2>&1
-    a2enmod rewrite > /dev/null 2>&1
+    a2enmod rewrite headers ssl >/dev/null 2>&1
+    a2ensite mahsabot.conf >/dev/null 2>&1
+    a2dissite 000-default >/dev/null 2>&1 || true
+
+    if ! apache2ctl -t >/dev/null 2>&1; then
+        abort "Apache configuration test failed. Check /etc/apache2/sites-available/mahsabot.conf"
+    fi
+
     systemctl reload apache2
-    log_info "Apache پیکربندی شد"
+    log_info "Apache is configured."
 }
 
-create_database_tables() {
-    log_step "ساخت جداول دیتابیس"
-    
-    php "${INSTALL_DIR}/setup/schema.php" && {
-        log_info "جداول دیتابیس ایجاد شد"
-    } || {
-        log_warn "ساخت جداول از طریق PHP ناموفق. تلاش مجدد..."
-        # Run inline
-        php -r "
-        require_once '${INSTALL_DIR}/config.php';
-        require_once '${INSTALL_DIR}/core/database.php';
-        require_once '${INSTALL_DIR}/setup/schema.php';
-        \$db = new mysqli(ESI_DB_HOST, ESI_DB_USER, ESI_DB_PASS, ESI_DB_NAME);
-        \$db->set_charset('utf8mb4');
-        esi_create_schema(\$db);
-        esi_seed_defaults(\$db);
-        echo 'OK';
-        "
-        log_info "جداول دیتابیس ایجاد شد"
-    }
-}
+setup_ssl() {
+    log_step "SSL setup"
 
-set_webhook() {
-    log_step "تنظیم Webhook"
-    
-    WEBHOOK_URL="${BOT_URL}bot.php"
-    RESULT=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${WEBHOOK_URL}")
-    
-    if echo "$RESULT" | grep -q '"ok":true'; then
-        log_info "Webhook تنظیم شد: ${WEBHOOK_URL}"
+    read -r -p "Enable Let's Encrypt SSL now? (Y/n): " ssl_confirm
+    if [[ "${ssl_confirm}" == "n" || "${ssl_confirm}" == "N" ]]; then
+        log_warn "Skipping SSL setup."
+        return
+    fi
+
+    local le_email
+    le_email="$(read_non_empty 'Enter email for Let'"'"'s Encrypt: ')"
+    if certbot --apache -d "${BOT_DOMAIN}" --non-interactive --agree-tos -m "${le_email}"; then
+        log_info "SSL certificate installed."
     else
-        log_error "تنظیم Webhook ناموفق: ${RESULT}"
+        log_warn "SSL installation failed. Continue without SSL for now."
     fi
 }
 
+create_database_tables() {
+    log_step "Creating database schema"
+
+    local runner
+    runner="$(mktemp /tmp/mahsabot-schema-XXXX.php)"
+
+    cat >"${runner}" <<PHP
+<?php
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+try {
+    require_once '${INSTALL_DIR}/config.php';
+    require_once '${INSTALL_DIR}/core/database.php';
+    require_once '${INSTALL_DIR}/setup/schema.php';
+
+    \$db = new mysqli(ESI_DB_HOST, ESI_DB_USER, ESI_DB_PASS, ESI_DB_NAME);
+    \$db->set_charset('utf8mb4');
+
+    if (!function_exists('esi_create_schema') || !function_exists('esi_seed_defaults')) {
+        throw new RuntimeException('Schema functions were not loaded.');
+    }
+
+    if (!esi_create_schema(\$db)) {
+        throw new RuntimeException('esi_create_schema returned false.');
+    }
+
+    esi_seed_defaults(\$db);
+
+    \$required = ['esi_members', 'esi_options'];
+    foreach (\$required as \$tableName) {
+        \$stmt = \$db->prepare('SHOW TABLES LIKE ?');
+        \$stmt->bind_param('s', \$tableName);
+        \$stmt->execute();
+        \$exists = \$stmt->get_result()->num_rows > 0;
+        \$stmt->close();
+        if (!\$exists) {
+            throw new RuntimeException('Required table missing: ' . \$tableName);
+        }
+    }
+
+    \$db->close();
+    echo "SCHEMA_OK";
+} catch (Throwable \$e) {
+    fwrite(STDERR, \$e->getMessage() . PHP_EOL);
+    exit(1);
+}
+PHP
+
+    if ! php "${runner}" >/tmp/mahsabot-schema.log 2>&1; then
+        local schema_err
+        schema_err="$(cat /tmp/mahsabot-schema.log 2>/dev/null || true)"
+        rm -f "${runner}" /tmp/mahsabot-schema.log
+        abort "Database schema setup failed. ${schema_err}"
+    fi
+
+    rm -f "${runner}" /tmp/mahsabot-schema.log
+    log_info "Database schema verified."
+}
+
 setup_cron_jobs() {
-    log_step "تنظیم Cron Jobs"
-    
-    CRON_FILE="/etc/cron.d/mahsabot"
-    cat > "$CRON_FILE" << CRONEOF
-# MahsaBot Cron Jobs
+    log_step "Configuring cron jobs"
+
+    cat >/etc/cron.d/mahsabot <<CRONEOF
+# MahsaBot cron jobs
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-# Broadcast messages (every minute)
 * * * * * www-data php ${INSTALL_DIR}/services/broadcaster.php >> /var/log/mahsabot_cron.log 2>&1
-
-# Verify TRX payments (every 2 minutes)
 */2 * * * * www-data php ${INSTALL_DIR}/services/tron_verifier.php >> /var/log/mahsabot_cron.log 2>&1
-
-# Check expired subscriptions (every 6 hours)
 0 */6 * * * www-data php ${INSTALL_DIR}/services/expiry_monitor.php >> /var/log/mahsabot_cron.log 2>&1
-
-# Distribute gifts (every 5 minutes)
 */5 * * * * www-data php ${INSTALL_DIR}/services/gift_distributor.php >> /var/log/mahsabot_cron.log 2>&1
-
-# Daily report (8:00 AM Tehran time)
 0 8 * * * www-data php ${INSTALL_DIR}/services/report_sender.php >> /var/log/mahsabot_cron.log 2>&1
 CRONEOF
 
-    chmod 644 "$CRON_FILE"
-    log_info "Cron Jobs تنظیم شد"
+    chmod 644 /etc/cron.d/mahsabot
+    log_info "Cron jobs written to /etc/cron.d/mahsabot."
 }
 
-copy_lib_files() {
-    log_step "کپی کتابخانه‌ها"
-    
-    mkdir -p "${INSTALL_DIR}/lib/phpqrcode"
-    
-    # phpqrcode will be included in the repo
-    if [[ -f "${INSTALL_DIR}/lib/phpqrcode/phpqrcode.php" ]]; then
-        log_info "کتابخانه QR Code موجود است"
+set_webhook() {
+    log_step "Setting Telegram webhook"
+
+    if [[ -z "${BOT_TOKEN}" || -z "${BOT_URL}" ]]; then
+        load_runtime_config
+    fi
+
+    local webhook_url
+    webhook_url="${BOT_URL}bot.php"
+
+    local set_result
+    set_result="$(curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${webhook_url}" || true)"
+    if ! echo "${set_result}" | grep -q '"ok":true'; then
+        abort "setWebhook failed: ${set_result}"
+    fi
+    log_info "Webhook set to ${webhook_url}"
+
+    local info_result
+    info_result="$(curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo" || true)"
+    if echo "${info_result}" | grep -q '"ok":true'; then
+        local actual_url
+        local last_error
+        actual_url="$(echo "${info_result}" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
+        last_error="$(echo "${info_result}" | sed -n 's/.*"last_error_message":"\([^"]*\)".*/\1/p')"
+
+        log_info "Webhook info url: ${actual_url:-unknown}"
+        if [[ -n "${last_error}" ]]; then
+            log_warn "Telegram webhook last_error_message: ${last_error}"
+        else
+            log_info "Telegram reports no webhook error."
+        fi
     else
-        log_warn "کتابخانه phpqrcode یافت نشد. QR Code غیرفعال خواهد بود."
+        log_warn "Could not read getWebhookInfo response: ${info_result}"
+    fi
+}
+
+post_install_checks() {
+    log_step "Running post-install checks"
+
+    if systemctl is-active --quiet apache2; then
+        log_info "Apache service is active."
+    else
+        abort "Apache service is not active."
+    fi
+
+    if systemctl is-active --quiet mysql; then
+        log_info "MySQL service is active."
+    else
+        abort "MySQL service is not active."
+    fi
+
+    if [[ -r "${INSTALL_DIR}/config.php" ]]; then
+        log_info "config.php exists and is readable."
+    else
+        abort "config.php is missing or unreadable."
+    fi
+
+    local table_check
+    table_check="$(php -r "
+require '${INSTALL_DIR}/config.php';
+\$db = new mysqli(ESI_DB_HOST, ESI_DB_USER, ESI_DB_PASS, ESI_DB_NAME);
+if (\$db->connect_error) { exit(2); }
+\$needed = ['esi_members', 'esi_options'];
+foreach (\$needed as \$t) {
+    \$stmt = \$db->prepare('SHOW TABLES LIKE ?');
+    \$stmt->bind_param('s', \$t);
+    \$stmt->execute();
+    if (\$stmt->get_result()->num_rows === 0) { exit(3); }
+    \$stmt->close();
+}
+echo 'OK';
+" 2>/dev/null || true)"
+
+    if [[ "${table_check}" != "OK" ]]; then
+        abort "Required tables are missing or database connection failed."
+    fi
+    log_info "Required tables exist."
+
+    if [[ -f /etc/cron.d/mahsabot ]]; then
+        log_info "Cron file exists: /etc/cron.d/mahsabot"
+    else
+        abort "Cron file is missing."
     fi
 }
 
 show_summary() {
     echo ""
-    echo -e "${GREEN}${BOLD}"
-    echo "  ╔══════════════════════════════════════╗"
-    echo "  ║     ✅ نصب با موفقیت انجام شد!      ║"
-    echo "  ╚══════════════════════════════════════╝"
-    echo -e "${NC}"
+    echo "=============================================================="
+    echo "Installation completed"
+    echo "=============================================================="
+    echo "Install path : ${INSTALL_DIR}"
+    echo "Bot URL      : ${BOT_URL}"
+    echo "Database     : ${DB_NAME}"
+    echo "DB user      : ${DB_USER}"
     echo ""
-    echo -e "  ${CYAN}📂 مسیر نصب:${NC}   ${INSTALL_DIR}"
-    echo -e "  ${CYAN}🌐 آدرس ربات:${NC}  ${BOT_URL}"
-    echo -e "  ${CYAN}🗃️  دیتابیس:${NC}    ${DB_NAME}"
-    echo -e "  ${CYAN}👤 کاربر DB:${NC}    ${DB_USER}"
+    echo "Next checks:"
+    echo "1) systemctl status apache2 mysql"
+    echo "2) cat /etc/cron.d/mahsabot"
+    echo "3) curl -s https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+    echo "4) send /start to your bot in Telegram"
     echo ""
-    echo -e "  ${YELLOW}⚠️  نکات مهم:${NC}"
-    echo "  ├ رمز دیتابیس را در جای امن ذخیره کنید"
-    echo "  ├ مطمئن شوید SSL فعال است"
-    echo "  ├ فایل config.php را بازبینی کنید"
-    echo "  └ ربات را در تلگرام با /start تست کنید"
-    echo ""
-    echo -e "  ${BLUE}📚 مستندات:${NC} https://github.com/benAliAlizadeh/mahsabot"
-    echo ""
+    echo "Logs:"
+    echo "- /var/log/apache2/mahsabot_error.log"
+    echo "- /var/log/mahsabot_cron.log"
+    echo "=============================================================="
 }
 
-# ── Uninstall ────────────────────────────────────────────────────
-uninstall() {
-    print_banner
-    echo -e "${RED}${BOLD}⚠️  حذف MahsaBot${NC}"
-    echo ""
-    echo -e "این عملیات فایل‌ها، دیتابیس و تنظیمات را حذف می‌کند."
-    echo -e "آیا مطمئن هستید؟ (y/N)"
-    read -r confirm
-    
-    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-        rm -rf "$INSTALL_DIR"
-        rm -f /etc/cron.d/mahsabot
-        rm -f /etc/apache2/sites-available/mahsabot.conf
-        a2dissite mahsabot.conf > /dev/null 2>&1
-        mysql -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`;" 2>/dev/null
-        mysql -e "DROP USER IF EXISTS '${DB_USER}'@'localhost';" 2>/dev/null
-        systemctl reload apache2
-        log_info "MahsaBot با موفقیت حذف شد"
+update_installation() {
+    log_step "Updating existing installation"
+
+    if [[ ! -d "${INSTALL_DIR}" ]]; then
+        abort "Install directory not found: ${INSTALL_DIR}"
+    fi
+
+    if [[ -d "${INSTALL_DIR}/.git" ]]; then
+        git -C "${INSTALL_DIR}" pull --ff-only || abort "git pull failed."
     else
-        log_info "عملیات لغو شد"
+        log_warn "No .git directory detected. Using archive refresh."
+        local tmp_dir
+        tmp_dir="$(mktemp -d)"
+        if ! curl -fL "${ARCHIVE_URL}" -o "${tmp_dir}/main.zip"; then
+            rm -rf "${tmp_dir}"
+            abort "Archive refresh failed: download error."
+        fi
+        if ! unzip -q "${tmp_dir}/main.zip" -d "${tmp_dir}"; then
+            rm -rf "${tmp_dir}"
+            abort "Archive refresh failed: unzip error."
+        fi
+        if [[ ! -d "${tmp_dir}/mahsabot-main" ]]; then
+            rm -rf "${tmp_dir}"
+            abort "Archive refresh failed: invalid content."
+        fi
+        cp -a "${tmp_dir}/mahsabot-main/." "${INSTALL_DIR}/"
+        rm -rf "${tmp_dir}"
+    fi
+
+    chown -R www-data:www-data "${INSTALL_DIR}"
+    chmod -R 755 "${INSTALL_DIR}"
+
+    load_runtime_config
+    configure_apache
+    create_database_tables
+    setup_cron_jobs
+    set_webhook
+    post_install_checks
+    show_summary
+}
+
+backup_database() {
+    log_step "Creating database backup"
+
+    load_runtime_config
+    local backup_file
+    backup_file="/root/mahsabot_backup_$(date +%Y%m%d_%H%M%S).sql"
+
+    if mysqldump -u "${DB_USER}" -p"${DB_PASS}" "${DB_NAME}" >"${backup_file}"; then
+        log_info "Backup saved to ${backup_file}"
+    else
+        abort "Backup failed."
     fi
 }
 
-# ── Main Menu ────────────────────────────────────────────────────
-main() {
+uninstall() {
+    print_banner
+    echo "WARNING: This will remove MahsaBot files, database, and web config."
+    read -r -p "Continue uninstall? (y/N): " confirm
+
+    if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
+        log_info "Uninstall canceled."
+        return
+    fi
+
+    rm -rf "${INSTALL_DIR}"
+    rm -f /etc/cron.d/mahsabot
+    rm -f /etc/apache2/sites-available/mahsabot.conf
+    a2dissite mahsabot.conf >/dev/null 2>&1 || true
+    systemctl reload apache2 || true
+
+    mysql -e "DROP DATABASE IF EXISTS \`${DB_NAME}\`;" >/dev/null 2>&1 || true
+    mysql -e "DROP USER IF EXISTS '${DB_USER}'@'localhost';" >/dev/null 2>&1 || true
+
+    log_info "MahsaBot uninstalled."
+}
+
+install_flow() {
+    install_dependencies
+    setup_database
+    download_bot
+    configure_bot
+    configure_apache
+    setup_ssl
+    create_database_tables
+    setup_cron_jobs
+    set_webhook
+    post_install_checks
+    show_summary
+}
+
+reset_webhook_flow() {
+    load_runtime_config
+    set_webhook
+}
+
+main_menu() {
     check_root
     check_os
     print_banner
-    
-    echo -e "  ${BOLD}عملیات مورد نظر را انتخاب کنید:${NC}"
+
+    echo "Choose an action:"
+    echo "1) Full install MahsaBot"
+    echo "2) Update/repair existing install"
+    echo "3) Uninstall MahsaBot"
+    echo "4) Reset webhook only"
+    echo "5) Backup database"
+    echo "0) Exit"
     echo ""
-    echo -e "  ${GREEN}1)${NC} نصب کامل MahsaBot"
-    echo -e "  ${YELLOW}2)${NC} بروزرسانی فایل‌ها"
-    echo -e "  ${RED}3)${NC} حذف MahsaBot"
-    echo -e "  ${BLUE}4)${NC} تنظیم مجدد Webhook"
-    echo -e "  ${CYAN}5)${NC} پشتیبان‌گیری از دیتابیس"
-    echo -e "  0) خروج"
-    echo ""
-    echo -ne "  انتخاب شما: "
-    read -r choice
-    
-    case $choice in
-        1)
-            install_dependencies
-            setup_database
-            download_bot
-            configure_bot
-            configure_apache
-            setup_ssl
-            create_database_tables
-            copy_lib_files
-            setup_cron_jobs
-            set_webhook
-            show_summary
-            ;;
-        2)
-            log_step "بروزرسانی"
-            cd "$INSTALL_DIR" && git pull 2>/dev/null || log_warn "بروزرسانی از گیت ناموفق"
-            chown -R www-data:www-data "$INSTALL_DIR"
-            log_info "فایل‌ها بروزرسانی شد"
-            ;;
-        3)
-            uninstall
-            ;;
-        4)
-            if [[ -f "${INSTALL_DIR}/config.php" ]]; then
-                BOT_TOKEN=$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_BOT_TOKEN;")
-                BOT_URL=$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_BOT_URL;")
-                set_webhook
-            else
-                log_error "فایل config.php یافت نشد"
-            fi
-            ;;
-        5)
-            BACKUP_FILE="/root/mahsabot_backup_$(date +%Y%m%d_%H%M%S).sql"
-            if [[ -f "${INSTALL_DIR}/config.php" ]]; then
-                DB_PASS_BACKUP=$(php -r "require '${INSTALL_DIR}/config.php'; echo ESI_DB_PASS;")
-                mysqldump -u "$DB_USER" -p"$DB_PASS_BACKUP" "$DB_NAME" > "$BACKUP_FILE"
-                log_info "پشتیبان در ${BACKUP_FILE} ذخیره شد"
-            else
-                log_error "فایل config.php یافت نشد"
-            fi
-            ;;
-        0)
-            exit 0
-            ;;
-        *)
-            log_error "انتخاب نامعتبر"
-            ;;
+    read -r -p "Your choice: " choice
+
+    case "${choice}" in
+        1) install_flow ;;
+        2) update_installation ;;
+        3) uninstall ;;
+        4) reset_webhook_flow ;;
+        5) backup_database ;;
+        0) exit 0 ;;
+        *) abort "Invalid menu choice." ;;
     esac
 }
 
-main "$@"
+main_menu "$@"

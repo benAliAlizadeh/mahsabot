@@ -124,30 +124,105 @@ function http_post(string $url, $data = [], array $headers = [], string $cookieF
 }
 
 /**
- * Validate Telegram request IP (security check)
+ * Validate Telegram webhook source IP.
+ * Modes:
+ *  - off: always allow
+ *  - strict: validate REMOTE_ADDR only
+ *  - proxy: validate proxy-aware headers first, then REMOTE_ADDR
  */
-function validate_telegram_ip(): bool {
+function validate_telegram_ip(?string &$reason = null): bool {
+    $mode = strtolower(trim((string)(defined('ESI_WEBHOOK_SECURITY') ? ESI_WEBHOOK_SECURITY : 'proxy')));
+    if (!in_array($mode, ['off', 'strict', 'proxy'], true)) {
+        $mode = 'proxy';
+    }
+
+    if ($mode === 'off') {
+        $reason = 'security=off';
+        return true;
+    }
+
     $telegramRanges = [
         '149.154.160.0/22', '149.154.164.0/22',
         '91.108.4.0/22', '91.108.56.0/22',
         '91.108.8.0/22', '95.161.64.0/20',
     ];
-    $clientIp = $_SERVER['REMOTE_ADDR'] ?? '';
-    foreach ($telegramRanges as $range) {
-        if (ip_in_cidr($clientIp, $range)) return true;
+
+    $candidates = [];
+    if ($mode === 'proxy') {
+        $candidates = get_webhook_client_ips();
+    } else {
+        $candidates = [trim((string)($_SERVER['REMOTE_ADDR'] ?? ''))];
     }
+
+    $checked = [];
+    foreach ($candidates as $candidateIp) {
+        if (empty($candidateIp)) {
+            continue;
+        }
+        $checked[] = $candidateIp;
+        foreach ($telegramRanges as $range) {
+            if (ip_in_cidr($candidateIp, $range)) {
+                $reason = 'matched ' . $candidateIp . ' in ' . $range . ' mode=' . $mode;
+                return true;
+            }
+        }
+    }
+
+    $reason = 'no matching telegram ip; mode=' . $mode . '; checked=' . implode(',', $checked);
     return false;
+}
+
+/**
+ * Collect candidate client IPs for webhook validation.
+ */
+function get_webhook_client_ips(): array {
+    $ips = [];
+
+    $cfIp = trim((string)($_SERVER['HTTP_CF_CONNECTING_IP'] ?? ''));
+    if (!empty($cfIp)) {
+        $ips[] = $cfIp;
+    }
+
+    $xff = trim((string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''));
+    if (!empty($xff)) {
+        $first = trim(explode(',', $xff)[0]);
+        if (!empty($first)) {
+            $ips[] = $first;
+        }
+    }
+
+    $xReal = trim((string)($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+    if (!empty($xReal)) {
+        $ips[] = $xReal;
+    }
+
+    $remote = trim((string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    if (!empty($remote)) {
+        $ips[] = $remote;
+    }
+
+    return array_values(array_unique($ips));
 }
 
 /**
  * Check if an IP is within a CIDR range
  */
 function ip_in_cidr(string $ip, string $cidr): bool {
+    if (empty($ip) || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+        return false;
+    }
     if (strpos($cidr, '/') === false) $cidr .= '/32';
     list($subnet, $bits) = explode('/', $cidr, 2);
+    $bits = (int)$bits;
+    if ($bits < 0 || $bits > 32) {
+        return false;
+    }
     $subnet = ip2long($subnet);
     $ip = ip2long($ip);
-    $mask = -1 << (32 - (int)$bits);
+    if ($subnet === false || $ip === false) {
+        return false;
+    }
+    $mask = $bits === 0 ? 0 : (-1 << (32 - $bits));
     return ($ip & $mask) === ($subnet & $mask);
 }
 
