@@ -49,12 +49,12 @@ function esi_create_schema(mysqli $db): bool
             `balance`         BIGINT        NOT NULL DEFAULT 0,
             `joined_at`       INT           DEFAULT NULL,
             `current_step`    VARCHAR(100)  NOT NULL DEFAULT 'idle',
-            `temp_data`       TEXT          DEFAULT NULL,
+            `temp_data`       TEXT,
             `referred_by`     BIGINT        NOT NULL DEFAULT 0,
             `first_visit`     TINYINT       NOT NULL DEFAULT 1,
             `spam_data`       VARCHAR(255)  NOT NULL DEFAULT '',
             `is_agent`        TINYINT       NOT NULL DEFAULT 0,
-            `discount_config` TEXT          DEFAULT '{}',
+            `discount_config` TEXT,
             `trial_used`      VARCHAR(10)   NOT NULL DEFAULT '',
             `referral_count`  INT           NOT NULL DEFAULT 0,
             PRIMARY KEY (`id`),
@@ -96,7 +96,7 @@ function esi_create_schema(mysqli $db): bool
             `capacity`    INT           NOT NULL DEFAULT 0,
             `active`      TINYINT       NOT NULL DEFAULT 1,
             `state`       TINYINT       NOT NULL DEFAULT 1,
-            `description` TEXT          DEFAULT NULL,
+            `description` TEXT,
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ";
@@ -109,10 +109,10 @@ function esi_create_schema(mysqli $db): bool
             `username`        VARCHAR(255)  DEFAULT NULL,
             `password`        VARCHAR(255)  DEFAULT NULL,
             `panel_type`      VARCHAR(50)   NOT NULL DEFAULT 'sanaei',
-            `ip`              TEXT          DEFAULT NULL,
+            `ip`              TEXT,
             `sni`             VARCHAR(255)  NOT NULL DEFAULT '',
-            `request_header`  TEXT          DEFAULT '',
-            `response_header` TEXT          DEFAULT '',
+            `request_header`  TEXT,
+            `response_header` TEXT,
             `header_type`     VARCHAR(50)   NOT NULL DEFAULT 'none',
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -139,7 +139,7 @@ function esi_create_schema(mysqli $db): bool
             `node_id`              INT           NOT NULL,
             `inbound_id`           INT           NOT NULL DEFAULT 0,
             `title`                VARCHAR(255)  DEFAULT NULL,
-            `description`          TEXT          DEFAULT NULL,
+            `description`          TEXT,
             `protocol`             VARCHAR(20)   NOT NULL DEFAULT 'vless',
             `volume`               FLOAT         NOT NULL DEFAULT 0,
             `duration`             INT           NOT NULL DEFAULT 30,
@@ -152,7 +152,7 @@ function esi_create_schema(mysqli $db): bool
             `security`             VARCHAR(20)   NOT NULL DEFAULT 'tls',
             `flow`                 VARCHAR(100)  NOT NULL DEFAULT '',
             `relay_mode`           TINYINT       NOT NULL DEFAULT 0,
-            `custom_sni`           TEXT          DEFAULT '',
+            `custom_sni`           TEXT,
             `custom_port`          INT           NOT NULL DEFAULT 0,
             `custom_path`          VARCHAR(255)  NOT NULL DEFAULT '',
             `reality_dest`         VARCHAR(255)  NOT NULL DEFAULT '',
@@ -180,7 +180,7 @@ function esi_create_schema(mysqli $db): bool
             `config_uuid`    VARCHAR(255)  DEFAULT NULL,
             `protocol`       VARCHAR(20)   DEFAULT NULL,
             `expires_at`     INT           DEFAULT NULL,
-            `connect_link`   TEXT          DEFAULT NULL,
+            `connect_link`   TEXT,
             `amount`         INT           NOT NULL DEFAULT 0,
             `status`         TINYINT       NOT NULL DEFAULT 1,
             `created_at`     INT           DEFAULT NULL,
@@ -199,7 +199,7 @@ function esi_create_schema(mysqli $db): bool
         CREATE TABLE IF NOT EXISTS `esi_transactions` (
             `id`             INT           NOT NULL AUTO_INCREMENT,
             `ref_code`       VARCHAR(100)  DEFAULT NULL,
-            `memo`           TEXT          DEFAULT '',
+            `memo`           TEXT,
             `gateway_ref`    VARCHAR(255)  NOT NULL DEFAULT '',
             `member_id`      BIGINT        NOT NULL,
             `tx_type`        VARCHAR(50)   DEFAULT NULL,
@@ -226,7 +226,7 @@ function esi_create_schema(mysqli $db): bool
             `type`       VARCHAR(20)   NOT NULL DEFAULT 'percent',
             `amount`     INT           NOT NULL DEFAULT 0,
             `max_uses`   INT           NOT NULL DEFAULT 0,
-            `used_by`    TEXT          DEFAULT '[]',
+            `used_by`    TEXT,
             `active`     TINYINT       NOT NULL DEFAULT 1,
             `expires_at` INT           NOT NULL DEFAULT 0,
             `created_at` INT           DEFAULT NULL,
@@ -254,7 +254,7 @@ function esi_create_schema(mysqli $db): bool
             `id`            INT           NOT NULL AUTO_INCREMENT,
             `ticket_id`     INT           NOT NULL,
             `sender_id`     BIGINT        NOT NULL,
-            `message`       TEXT          DEFAULT NULL,
+            `message`       TEXT,
             `message_type`  VARCHAR(20)   NOT NULL DEFAULT 'text',
             `tg_message_id` INT           NOT NULL DEFAULT 0,
             `created_at`    INT           DEFAULT NULL,
@@ -320,7 +320,7 @@ function esi_create_schema(mysqli $db): bool
             `id`         INT           NOT NULL AUTO_INCREMENT,
             `title`      VARCHAR(255)  DEFAULT NULL,
             `platform`   VARCHAR(50)   DEFAULT NULL,
-            `link`       TEXT          DEFAULT NULL,
+            `link`       TEXT,
             `sort_order` INT           NOT NULL DEFAULT 0,
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -331,7 +331,7 @@ function esi_create_schema(mysqli $db): bool
         CREATE TABLE IF NOT EXISTS `esi_options` (
             `id`           INT           NOT NULL AUTO_INCREMENT,
             `option_key`   VARCHAR(255)  NOT NULL,
-            `option_value` TEXT          DEFAULT NULL,
+            `option_value` TEXT,
             PRIMARY KEY (`id`),
             UNIQUE KEY `uk_option_key` (`option_key`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -353,7 +353,7 @@ function esi_create_schema(mysqli $db): bool
     $queries[] = "
         CREATE TABLE IF NOT EXISTS `esi_broadcast` (
             `id`                INT           NOT NULL AUTO_INCREMENT,
-            `message`           TEXT          DEFAULT NULL,
+            `message`           TEXT,
             `message_type`      VARCHAR(20)   NOT NULL DEFAULT 'text',
             `tg_message_id`     INT           NOT NULL DEFAULT 0,
             `status`            VARCHAR(20)   NOT NULL DEFAULT 'pending',

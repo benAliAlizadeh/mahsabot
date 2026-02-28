@@ -394,10 +394,23 @@ setup_ssl() {
 
     local le_email
     le_email="$(read_non_empty 'Enter email for Let'"'"'s Encrypt: ')"
-    if certbot --apache -d "${BOT_DOMAIN}" --non-interactive --agree-tos -m "${le_email}"; then
+    if certbot --apache --no-redirect -d "${BOT_DOMAIN}" --non-interactive --agree-tos -m "${le_email}"; then
         log_info "SSL certificate installed."
     else
-        log_warn "SSL installation failed. Continue without SSL for now."
+        local cert_path
+        cert_path="/etc/letsencrypt/live/${BOT_DOMAIN}/fullchain.pem"
+
+        if [[ -f "${cert_path}" ]]; then
+            log_warn "Certbot reported a non-fatal install issue, but certificate exists at ${cert_path}."
+            log_warn "Trying certbot install without redirect enhancement."
+            if certbot install --cert-name "${BOT_DOMAIN}" --apache --no-redirect --non-interactive; then
+                log_info "SSL certificate installed from existing cert."
+            else
+                log_warn "Certificate exists but Apache auto-install could not finish. Keeping current config and continuing."
+            fi
+        else
+            log_warn "SSL installation failed. Continue without SSL for now."
+        fi
     fi
 }
 
