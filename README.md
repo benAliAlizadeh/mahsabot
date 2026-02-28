@@ -218,3 +218,39 @@ Contributions are welcome! Please submit pull requests with clear descriptions.
 ---
 
 **Made with ❤️ by MahsaBot Team**
+
+---
+
+## Troubleshooting
+
+### Access denied for `mahsabot_user@localhost` during install
+
+If installer fails on schema step with:
+`Access denied for user 'mahsabot_user'@'localhost' (using password: YES)`
+
+Root cause:
+- Existing MySQL user had an old password while `config.php` had a newer one.
+
+Repair in place (no data loss):
+1. Read `ESI_DB_PASS` from `/var/www/mahsabot/config.php`.
+2. Sync MySQL password:
+   ```bash
+   mysql -e "ALTER USER 'mahsabot_user'@'localhost' IDENTIFIED BY '<PASSWORD_FROM_CONFIG>'; FLUSH PRIVILEGES;"
+   ```
+3. Run installer repair:
+   ```bash
+   sudo bash /var/www/mahsabot/mahsabot.sh
+   ```
+   Choose `2) Update/repair existing install`.
+4. Verify DB connection:
+   ```bash
+   php -r "require '/var/www/mahsabot/config.php'; new mysqli(ESI_DB_HOST,ESI_DB_USER,ESI_DB_PASS,ESI_DB_NAME); echo 'OK';"
+   ```
+5. Verify webhook and bot response:
+   ```bash
+   curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+   ```
+   Then send `/start` to the bot.
+
+Security note:
+- If a real bot token was exposed in logs or chats, rotate it in `@BotFather`.

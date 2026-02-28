@@ -54,6 +54,23 @@ abort() {
     exit 1
 }
 
+is_safe_db_password() {
+    local pass="$1"
+    [[ "${pass}" =~ ^[A-Za-z0-9@#%+=:.,/_-]+$ ]]
+}
+
+sync_database_credentials() {
+    local db_name="$1"
+    local db_user="$2"
+    local db_pass="$3"
+
+    mysql -e "CREATE DATABASE IF NOT EXISTS \`${db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    mysql -e "CREATE USER IF NOT EXISTS '${db_user}'@'localhost' IDENTIFIED BY '${db_pass}';"
+    mysql -e "ALTER USER '${db_user}'@'localhost' IDENTIFIED BY '${db_pass}';"
+    mysql -e "GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_user}'@'localhost';"
+    mysql -e "FLUSH PRIVILEGES;"
+}
+
 check_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         abort "This script must run as root. Use: sudo bash mahsabot.sh"
@@ -104,23 +121,32 @@ install_dependencies() {
 setup_database() {
     log_step "Configuring database"
 
-    read -r -s -p "Enter database password for ${DB_USER} (leave empty to auto-generate): " DB_PASS
-    echo ""
+    while true; do
+        read -r -s -p "Enter database password for ${DB_USER} (leave empty to auto-generate): " DB_PASS
+        echo ""
 
-    if [[ -z "${DB_PASS}" ]]; then
-        local chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        DB_PASS=""
-        for ((i = 0; i < 24; i++)); do
-            DB_PASS+="${chars:RANDOM % ${#chars}:1}"
-        done
-        log_warn "Generated database password: ${DB_PASS}"
-        log_warn "Save this password in a secure place."
-    fi
+        if [[ -z "${DB_PASS}" ]]; then
+            local chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+            DB_PASS=""
+            for ((i = 0; i < 24; i++)); do
+                DB_PASS+="${chars:RANDOM % ${#chars}:1}"
+            done
+            log_warn "Generated database password: ${DB_PASS}"
+            log_warn "Save this password in a secure place."
+            break
+        fi
 
-    mysql -e "CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    mysql -e "CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';"
-    mysql -e "GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';"
-    mysql -e "FLUSH PRIVILEGES;"
+        if ! is_safe_db_password "${DB_PASS}"; then
+            log_error "Invalid database password characters."
+            echo "Allowed characters: A-Z a-z 0-9 @ # % + = : . , / _ -"
+            echo "Please enter a safe ASCII password."
+            continue
+        fi
+
+        break
+    done
+
+    sync_database_credentials "${DB_NAME}" "${DB_USER}" "${DB_PASS}"
 
     log_info "Database and user are ready."
 }
@@ -243,6 +269,53 @@ load_runtime_config() {
     if [[ -n "${BOT_URL}" && "${BOT_URL}" != */ ]]; then
         BOT_URL="${BOT_URL}/"
     fi
+}
+
+sync_database_credentials_from_config() {
+    log_step "Repairing database credentials from config.php"
+
+    load_runtime_config
+
+    if ! is_safe_db_password "${DB_PASS}"; then
+        abort "Database password in config.php contains unsupported characters for auto-repair. Use a safe ASCII password and rerun installer."
+    fi
+
+    sync_database_credentials "${DB_NAME}" "${DB_USER}" "${DB_PASS}"
+    log_info "Database credentials synced from config.php."
+}
+
+verify_database_connection() {
+    log_step "Verifying database connection"
+
+    if [[ ! -r "${INSTALL_DIR}/config.php" ]]; then
+        abort "config.php not found in ${INSTALL_DIR}"
+    fi
+
+    local verify_result
+    verify_result="$(php -r "
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
+try {
+    require '${INSTALL_DIR}/config.php';
+    \$db = new mysqli(ESI_DB_HOST, ESI_DB_USER, ESI_DB_PASS, ESI_DB_NAME);
+    \$db->set_charset('utf8mb4');
+    \$db->close();
+    echo 'DB_OK';
+} catch (Throwable \$e) {
+    fwrite(STDERR, \$e->getMessage());
+    exit(1);
+}
+" 2>&1 || true)"
+
+    if [[ "${verify_result}" != "DB_OK" ]]; then
+        load_runtime_config
+        abort "Database connection failed using config.php: ${verify_result}
+Repair hint:
+1) Read password from ${INSTALL_DIR}/config.php (ESI_DB_PASS)
+2) Run:
+mysql -e \"ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '<PASSWORD_FROM_CONFIG>'; FLUSH PRIVILEGES;\""
+    fi
+
+    log_info "Database connection via config.php is valid."
 }
 
 configure_apache() {
@@ -544,7 +617,8 @@ update_installation() {
     chown -R www-data:www-data "${INSTALL_DIR}"
     chmod -R 755 "${INSTALL_DIR}"
 
-    load_runtime_config
+    sync_database_credentials_from_config
+    verify_database_connection
     configure_apache
     create_database_tables
     setup_cron_jobs
@@ -594,6 +668,7 @@ install_flow() {
     setup_database
     download_bot
     configure_bot
+    verify_database_connection
     configure_apache
     setup_ssl
     create_database_tables
