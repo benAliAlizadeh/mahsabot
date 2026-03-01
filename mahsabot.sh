@@ -13,6 +13,7 @@ DB_NAME="mahsabot_db"
 DB_USER="mahsabot_user"
 REPO_URL="https://github.com/benAliAlizadeh/mahsabot.git"
 ARCHIVE_URL="https://github.com/benAliAlizadeh/mahsabot/archive/refs/heads/main.zip"
+INSTALL_LOG="/var/log/mahsabot_installer.log"
 
 BOT_TOKEN=""
 ADMIN_ID=""
@@ -20,6 +21,7 @@ BOT_USERNAME=""
 BOT_DOMAIN=""
 BOT_URL=""
 DB_PASS=""
+RESUME_REPAIR_MODE=0
 
 print_banner() {
     clear
@@ -51,6 +53,7 @@ log_step() {
 
 abort() {
     log_error "$1"
+    echo "Installer log: ${INSTALL_LOG}"
     exit 1
 }
 
@@ -69,6 +72,48 @@ sync_database_credentials() {
     mysql -e "ALTER USER '${db_user}'@'localhost' IDENTIFIED BY '${db_pass}';"
     mysql -e "GRANT ALL PRIVILEGES ON \`${db_name}\`.* TO '${db_user}'@'localhost';"
     mysql -e "FLUSH PRIVILEGES;"
+}
+
+prepare_installer_log() {
+    touch "${INSTALL_LOG}"
+    chmod 600 "${INSTALL_LOG}" || true
+    {
+        echo ""
+        echo "=============================================================="
+        echo "MahsaBot installer run at $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "=============================================================="
+    } >>"${INSTALL_LOG}"
+}
+
+refresh_install_source() {
+    local target_dir="$1"
+
+    if [[ -d "${target_dir}/.git" ]]; then
+        if ! git -C "${target_dir}" pull --ff-only 2>&1 | tee -a "${INSTALL_LOG}"; then
+            abort "Failed to update source with git pull."
+        fi
+        return
+    fi
+
+    log_warn "No .git directory detected. Using archive refresh."
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+
+    if ! curl -fL "${ARCHIVE_URL}" -o "${tmp_dir}/main.zip" >>"${INSTALL_LOG}" 2>&1; then
+        rm -rf "${tmp_dir}"
+        abort "Archive refresh failed: download error."
+    fi
+    if ! unzip -q "${tmp_dir}/main.zip" -d "${tmp_dir}" >>"${INSTALL_LOG}" 2>&1; then
+        rm -rf "${tmp_dir}"
+        abort "Archive refresh failed: unzip error."
+    fi
+    if [[ ! -d "${tmp_dir}/mahsabot-main" ]]; then
+        rm -rf "${tmp_dir}"
+        abort "Archive refresh failed: invalid content."
+    fi
+
+    cp -a "${tmp_dir}/mahsabot-main/." "${target_dir}/"
+    rm -rf "${tmp_dir}"
 }
 
 check_root() {
@@ -155,12 +200,31 @@ download_bot() {
     log_step "Downloading MahsaBot files"
 
     if [[ -d "${INSTALL_DIR}" ]]; then
-        log_warn "${INSTALL_DIR} already exists."
-        read -r -p "Overwrite existing installation? (y/N): " confirm
-        if [[ "${confirm}" != "y" && "${confirm}" != "Y" ]]; then
-            abort "Installation canceled by user."
-        fi
-        rm -rf "${INSTALL_DIR}"
+        echo "Existing installation found at ${INSTALL_DIR}:"
+        echo "1) Continue/Repair existing install"
+        echo "2) Fresh install (delete and reinstall)"
+        echo "0) Cancel"
+        read -r -p "Choose action: " existing_choice
+
+        case "${existing_choice}" in
+            1)
+                RESUME_REPAIR_MODE=1
+                refresh_install_source "${INSTALL_DIR}"
+                chown -R www-data:www-data "${INSTALL_DIR}"
+                chmod -R 755 "${INSTALL_DIR}"
+                log_info "Continue/Repair mode selected."
+                return
+                ;;
+            2)
+                rm -rf "${INSTALL_DIR}"
+                ;;
+            0)
+                abort "Installation canceled by user."
+                ;;
+            *)
+                abort "Invalid choice."
+                ;;
+        esac
     fi
 
     if git clone --depth 1 "${REPO_URL}" "${INSTALL_DIR}"; then
@@ -305,6 +369,7 @@ try {
     exit(1);
 }
 " 2>&1 || true)"
+    echo "[DB VERIFY] ${verify_result}" >>"${INSTALL_LOG}"
 
     if [[ "${verify_result}" != "DB_OK" ]]; then
         load_runtime_config
@@ -375,7 +440,7 @@ APEOF
     a2ensite mahsabot.conf >/dev/null 2>&1
     a2dissite 000-default >/dev/null 2>&1 || true
 
-    if ! apache2ctl -t >/dev/null 2>&1; then
+    if ! apache2ctl -t >>"${INSTALL_LOG}" 2>&1; then
         abort "Apache configuration test failed. Check /etc/apache2/sites-available/mahsabot.conf"
     fi
 
@@ -394,7 +459,7 @@ setup_ssl() {
 
     local le_email
     le_email="$(read_non_empty 'Enter email for Let'"'"'s Encrypt: ')"
-    if certbot --apache --no-redirect -d "${BOT_DOMAIN}" --non-interactive --agree-tos -m "${le_email}"; then
+    if certbot --apache --no-redirect -d "${BOT_DOMAIN}" --non-interactive --agree-tos -m "${le_email}" 2>&1 | tee -a "${INSTALL_LOG}"; then
         log_info "SSL certificate installed."
     else
         local cert_path
@@ -403,7 +468,7 @@ setup_ssl() {
         if [[ -f "${cert_path}" ]]; then
             log_warn "Certbot reported a non-fatal install issue, but certificate exists at ${cert_path}."
             log_warn "Trying certbot install without redirect enhancement."
-            if certbot install --cert-name "${BOT_DOMAIN}" --apache --no-redirect --non-interactive; then
+            if certbot install --cert-name "${BOT_DOMAIN}" --apache --no-redirect --non-interactive 2>&1 | tee -a "${INSTALL_LOG}"; then
                 log_info "SSL certificate installed from existing cert."
             else
                 log_warn "Certificate exists but Apache auto-install could not finish. Keeping current config and continuing."
@@ -443,7 +508,7 @@ try {
 
     \$required = ['esi_members', 'esi_options'];
     foreach (\$required as \$tableName) {
-        \$stmt = \$db->prepare('SHOW TABLES LIKE ?');
+        \$stmt = \$db->prepare('SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1');
         \$stmt->bind_param('s', \$tableName);
         \$stmt->execute();
         \$exists = \$stmt->get_result()->num_rows > 0;
@@ -464,10 +529,12 @@ PHP
     if ! php "${runner}" >/tmp/mahsabot-schema.log 2>&1; then
         local schema_err
         schema_err="$(cat /tmp/mahsabot-schema.log 2>/dev/null || true)"
+        cat /tmp/mahsabot-schema.log >>"${INSTALL_LOG}" 2>/dev/null || true
         rm -f "${runner}" /tmp/mahsabot-schema.log
         abort "Database schema setup failed. ${schema_err}"
     fi
 
+    cat /tmp/mahsabot-schema.log >>"${INSTALL_LOG}" 2>/dev/null || true
     rm -f "${runner}" /tmp/mahsabot-schema.log
     log_info "Database schema verified."
 }
@@ -503,6 +570,7 @@ set_webhook() {
 
     local set_result
     set_result="$(curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${webhook_url}" || true)"
+    echo "[WEBHOOK setWebhook] ${set_result}" >>"${INSTALL_LOG}"
     if ! echo "${set_result}" | grep -q '"ok":true'; then
         abort "setWebhook failed: ${set_result}"
     fi
@@ -510,6 +578,7 @@ set_webhook() {
 
     local info_result
     info_result="$(curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo" || true)"
+    echo "[WEBHOOK getWebhookInfo] ${info_result}" >>"${INSTALL_LOG}"
     if echo "${info_result}" | grep -q '"ok":true'; then
         local actual_url
         local last_error
@@ -555,7 +624,7 @@ require '${INSTALL_DIR}/config.php';
 if (\$db->connect_error) { exit(2); }
 \$needed = ['esi_members', 'esi_options'];
 foreach (\$needed as \$t) {
-    \$stmt = \$db->prepare('SHOW TABLES LIKE ?');
+    \$stmt = \$db->prepare('SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1');
     \$stmt->bind_param('s', \$t);
     \$stmt->execute();
     if (\$stmt->get_result()->num_rows === 0) { exit(3); }
@@ -605,27 +674,7 @@ update_installation() {
         abort "Install directory not found: ${INSTALL_DIR}"
     fi
 
-    if [[ -d "${INSTALL_DIR}/.git" ]]; then
-        git -C "${INSTALL_DIR}" pull --ff-only || abort "git pull failed."
-    else
-        log_warn "No .git directory detected. Using archive refresh."
-        local tmp_dir
-        tmp_dir="$(mktemp -d)"
-        if ! curl -fL "${ARCHIVE_URL}" -o "${tmp_dir}/main.zip"; then
-            rm -rf "${tmp_dir}"
-            abort "Archive refresh failed: download error."
-        fi
-        if ! unzip -q "${tmp_dir}/main.zip" -d "${tmp_dir}"; then
-            rm -rf "${tmp_dir}"
-            abort "Archive refresh failed: unzip error."
-        fi
-        if [[ ! -d "${tmp_dir}/mahsabot-main" ]]; then
-            rm -rf "${tmp_dir}"
-            abort "Archive refresh failed: invalid content."
-        fi
-        cp -a "${tmp_dir}/mahsabot-main/." "${INSTALL_DIR}/"
-        rm -rf "${tmp_dir}"
-    fi
+    refresh_install_source "${INSTALL_DIR}"
 
     chown -R www-data:www-data "${INSTALL_DIR}"
     chmod -R 755 "${INSTALL_DIR}"
@@ -633,6 +682,7 @@ update_installation() {
     sync_database_credentials_from_config
     verify_database_connection
     configure_apache
+    setup_ssl
     create_database_tables
     setup_cron_jobs
     set_webhook
@@ -678,8 +728,22 @@ uninstall() {
 
 install_flow() {
     install_dependencies
-    setup_database
     download_bot
+
+    if [[ "${RESUME_REPAIR_MODE}" -eq 1 ]]; then
+        sync_database_credentials_from_config
+        verify_database_connection
+        configure_apache
+        setup_ssl
+        create_database_tables
+        setup_cron_jobs
+        set_webhook
+        post_install_checks
+        show_summary
+        return
+    fi
+
+    setup_database
     configure_bot
     verify_database_connection
     configure_apache
@@ -699,6 +763,7 @@ reset_webhook_flow() {
 main_menu() {
     check_root
     check_os
+    prepare_installer_log
     print_banner
 
     echo "Choose an action:"

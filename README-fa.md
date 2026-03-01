@@ -166,3 +166,28 @@ MIT — فایل [LICENSE](LICENSE) را ببینید.
 
 ???? ??????:
 - ??? ???? ????? ???? ???? ??? ?? ?? ????? ???? ???? ?? ?? ?? `@BotFather` ??? ????.
+
+---
+
+## Troubleshooting (Simple)
+
+### SQL syntax error near `?`
+If install fails in schema step with SQL syntax near `?`, update and run repair:
+```bash
+cd /var/www/mahsabot && git pull
+sudo bash /var/www/mahsabot/mahsabot.sh
+```
+Choose `2) Update/repair existing install`.
+
+### Certbot redirect conflict
+If certbot issues cert but fails redirect enhancement, run:
+```bash
+certbot install --cert-name <your-domain> --apache --no-redirect
+```
+Then rerun installer repair.
+
+### Quick repair command
+```bash
+sudo bash /var/www/mahsabot/mahsabot.sh
+```
+Then choose `2) Update/repair existing install`.

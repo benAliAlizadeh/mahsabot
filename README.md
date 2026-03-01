@@ -254,3 +254,31 @@ Repair in place (no data loss):
 
 Security note:
 - If a real bot token was exposed in logs or chats, rotate it in `@BotFather`.
+
+### SQL syntax error near `?` during schema step
+
+If installer fails with:
+`You have an error in your SQL syntax ... near '?'`
+
+Use the latest installer version, then run repair:
+```bash
+cd /var/www/mahsabot && git pull
+sudo bash /var/www/mahsabot/mahsabot.sh
+```
+Choose `2) Update/repair existing install`.
+
+### Certbot redirect conflict
+
+If certificate is issued but Certbot cannot enable redirect enhancement automatically:
+- Keep installation running (non-fatal).
+- Re-run installer repair, or run:
+  ```bash
+  certbot install --cert-name <your-domain> --apache --no-redirect
+  ```
+
+### Quick repair path
+
+```bash
+sudo bash /var/www/mahsabot/mahsabot.sh
+```
+Then choose `2) Update/repair existing install`.
