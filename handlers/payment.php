@@ -138,10 +138,10 @@ function handle_cart_receipt_upload(int $payId): void {
     tg_send('✅ رسید ارسال شد! لطفاً منتظر تایید ادمین بمانید.');
 
     // Notify admins
-    notify_admins_cart_receipt($payId, $tx, $fileId);
+    payment_notify_admins_cart_receipt($payId, $tx, $fileId);
 }
 
-function notify_admins_cart_receipt(int $payId, array $tx, string $fileId): void {
+function payment_notify_admins_cart_receipt(int $payId, array $tx, string $fileId): void {
     global $db;
 
     $admins = esi_fetch_all($db, "SELECT tg_id FROM esi_admins");
@@ -311,10 +311,10 @@ function handle_tron_txid_submit(int $payId, string $txid): void {
     tg_send('✅ TXID ثبت شد! تایید خودکار در حال بررسی است. لطفاً منتظر بمانید.');
 
     // Notify admins
-    notify_admins_tron_payment($payId, $tx, $txid);
+    payment_notify_admins_tron_payment($payId, $tx, $txid);
 }
 
-function notify_admins_tron_payment(int $payId, array $tx, string $txid): void {
+function payment_notify_admins_tron_payment(int $payId, array $tx, string $txid): void {
     global $db;
 
     $admins = esi_fetch_all($db, "SELECT tg_id FROM esi_admins");
@@ -340,7 +340,7 @@ function notify_admins_tron_payment(int $payId, array $tx, string $txid): void {
 
 // ─── Cancel Transaction ─────────────────────────────────────────────────────────
 
-function handle_cancel_transaction(int $payId): void {
+function payment_handle_cancel_transaction(int $payId): void {
     global $db, $fromId, $msgId;
 
     $tx = esi_fetch_one($db,
@@ -381,19 +381,19 @@ function process_payment(int $payId): void {
 
     switch ($type) {
         case 'BUY_SUB':
-            process_buy_subscription($tx, $memberId);
+            payment_process_buy_subscription($tx, $memberId);
             break;
         case 'RENEW_ACCOUNT':
-            process_renew_account($tx, $memberId);
+            payment_process_renew_account($tx, $memberId);
             break;
         case 'INCREASE_WALLET':
-            process_increase_wallet($tx, $memberId);
+            payment_process_increase_wallet($tx, $memberId);
             break;
         case 'INCREASE_DAY':
-            process_increase_day($tx, $memberId);
+            payment_process_increase_day($tx, $memberId);
             break;
         case 'INCREASE_VOLUME':
-            process_increase_volume($tx, $memberId);
+            payment_process_increase_volume($tx, $memberId);
             break;
         default:
             throw new Exception("نوع تراکنش نامشخص: {$type}");
@@ -405,7 +405,7 @@ function process_payment(int $payId): void {
 
 // ─── Process: Buy Subscription ──────────────────────────────────────────────────
 
-function process_buy_subscription(array $tx, int $memberId): void {
+function payment_process_buy_subscription(array $tx, int $memberId): void {
     global $db;
 
     $pkgId = (int)$tx['package_id'];
@@ -473,15 +473,15 @@ function process_buy_subscription(array $tx, int $memberId): void {
 
     // Build connection link if not from Marzban
     if (empty($connectLink)) {
-        $connectLink = build_subscription_link_for_user($db, $subId);
+        $connectLink = payment_build_subscription_link_for_user($db, $subId);
     }
 
     // Generate QR code
-    $qrPath = generate_qr_code_for_sub($connectLink, $subId);
+    $qrPath = payment_generate_qr_code_for_sub($connectLink, $subId);
 
     // Notify user
     $member = esi_get_member($db, $memberId);
-    $userMsg = build_sub_created_message($nodeInfo, $subId, $remark, $connectLink, $days, $volume, $pkg);
+    $userMsg = payment_build_sub_created_message($nodeInfo, $subId, $remark, $connectLink, $days, $volume, $pkg);
 
     if ($qrPath && file_exists($qrPath)) {
         tg_photo(new \CURLFile($qrPath), $userMsg, null, 'MarkDown', $memberId);
@@ -494,19 +494,19 @@ function process_buy_subscription(array $tx, int $memberId): void {
     }
 
     // Referral reward
-    handle_referral_reward($memberId, (int)$tx['amount']);
+    payment_handle_referral_reward($memberId, (int)$tx['amount']);
 
     // Notify admins
-    notify_admins_new_sub($tx, $member, $nodeInfo, $subId);
+    payment_notify_admins_new_sub($tx, $member, $nodeInfo, $subId);
 }
 
 // ─── Process: Renew Account ─────────────────────────────────────────────────────
 
-function process_renew_account(array $tx, int $memberId): void {
+function payment_process_renew_account(array $tx, int $memberId): void {
     global $db;
 
     // Read sub ID from memo (renew:SUB_ID)
-    $subId = extract_memo_value($tx['memo'], 'renew_sub');
+    $subId = payment_extract_memo_value($tx['memo'], 'renew_sub');
     $sub   = esi_fetch_one($db, "SELECT * FROM esi_subscriptions WHERE id = ? AND member_id = ?", 'ii', $subId, $memberId);
     if (!$sub) throw new Exception('اشتراک یافت نشد.');
 
@@ -543,12 +543,12 @@ function process_renew_account(array $tx, int $memberId): void {
         'parse_mode' => 'Markdown',
     ]);
 
-    handle_referral_reward($memberId, (int)$tx['amount']);
+    payment_handle_referral_reward($memberId, (int)$tx['amount']);
 }
 
 // ─── Process: Increase Wallet ───────────────────────────────────────────────────
 
-function process_increase_wallet(array $tx, int $memberId): void {
+function payment_process_increase_wallet(array $tx, int $memberId): void {
     global $db;
 
     $amount = (int)$tx['amount'];
@@ -563,10 +563,10 @@ function process_increase_wallet(array $tx, int $memberId): void {
 
 // ─── Process: Increase Day ──────────────────────────────────────────────────────
 
-function process_increase_day(array $tx, int $memberId): void {
+function payment_process_increase_day(array $tx, int $memberId): void {
     global $db;
 
-    $subId   = extract_memo_value($tx['memo'], 'addon_sub');
+    $subId   = payment_extract_memo_value($tx['memo'], 'addon_sub');
     $addDays = (int)$tx['duration'];
 
     $sub = esi_fetch_one($db, "SELECT * FROM esi_subscriptions WHERE id = ? AND member_id = ?", 'ii', $subId, $memberId);
@@ -597,10 +597,10 @@ function process_increase_day(array $tx, int $memberId): void {
 
 // ─── Process: Increase Volume ───────────────────────────────────────────────────
 
-function process_increase_volume(array $tx, int $memberId): void {
+function payment_process_increase_volume(array $tx, int $memberId): void {
     global $db;
 
-    $subId = extract_memo_value($tx['memo'], 'addon_sub');
+    $subId = payment_extract_memo_value($tx['memo'], 'addon_sub');
     $addGb = (float)$tx['volume'];
 
     $sub = esi_fetch_one($db, "SELECT * FROM esi_subscriptions WHERE id = ? AND member_id = ?", 'ii', $subId, $memberId);
@@ -628,7 +628,7 @@ function process_increase_volume(array $tx, int $memberId): void {
 /**
  * Build subscription link for user using panel or connection module.
  */
-function build_subscription_link_for_user(mysqli $db, int $subId): string {
+function payment_build_subscription_link_for_user(mysqli $db, int $subId): string {
     $sub = esi_fetch_one($db, "SELECT * FROM esi_subscriptions WHERE id = ?", 'i', $subId);
     if (!$sub) return '';
 
@@ -648,7 +648,7 @@ function build_subscription_link_for_user(mysqli $db, int $subId): string {
 /**
  * Build the message sent to user after subscription creation.
  */
-function build_sub_created_message(array $nodeInfo, int $subId, string $remark, string $link, int $days, float $volume, array $pkg): string {
+function payment_build_sub_created_message(array $nodeInfo, int $subId, string $remark, string $link, int $days, float $volume, array $pkg): string {
     global $msg;
 
     $expiryDate = jdate('Y/m/d', time() + ($days * 86400));
@@ -668,7 +668,7 @@ function build_sub_created_message(array $nodeInfo, int $subId, string $remark, 
 /**
  * Generate QR code for subscription link.
  */
-function generate_qr_code_for_sub(string $data, int $subId): ?string {
+function payment_generate_qr_code_for_sub(string $data, int $subId): ?string {
     if (empty($data)) return null;
 
     $qrDir = __DIR__ . '/../temp/qr/';
@@ -689,7 +689,7 @@ function generate_qr_code_for_sub(string $data, int $subId): ?string {
 /**
  * Handle referral reward.
  */
-function handle_referral_reward(int $memberId, int $txAmount): void {
+function payment_handle_referral_reward(int $memberId, int $txAmount): void {
     global $db;
 
     $options    = esi_get_options($db, 'BOT_CONFIG');
@@ -714,7 +714,7 @@ function handle_referral_reward(int $memberId, int $txAmount): void {
 /**
  * Notify admins of new subscription.
  */
-function notify_admins_new_sub(array $tx, ?array $member, array $nodeInfo, int $subId): void {
+function payment_notify_admins_new_sub(array $tx, ?array $member, array $nodeInfo, int $subId): void {
     global $db;
 
     $admins = esi_fetch_all($db, "SELECT tg_id FROM esi_admins");
@@ -737,7 +737,7 @@ function notify_admins_new_sub(array $tx, ?array $member, array $nodeInfo, int $
  * Extract a value from newline-delimited memo field.
  * Format: "key:value\nkey2:value2"
  */
-function extract_memo_value(string $memo, string $key): int {
+function payment_extract_memo_value(string $memo, string $key): int {
     if (preg_match('/' . preg_quote($key, '/') . ':(\d+)/', $memo, $m)) {
         return (int)$m[1];
     }
@@ -747,7 +747,7 @@ function extract_memo_value(string $memo, string $key): int {
 /**
  * Build payment method keyboard for a transaction.
  */
-function build_payment_keyboard(int $payId, int $amount, array $member): array {
+function payment_build_payment_keyboard(int $payId, int $amount, array $member): array {
     global $db;
 
     $options = esi_get_options($db, 'GATEWAY_KEYS');
@@ -780,4 +780,11 @@ function build_payment_keyboard(int $payId, int $amount, array $member): array {
     }
 
     return $rows;
+}
+
+// Backward-compatible alias for older handlers that still call the legacy name.
+if (!function_exists('build_payment_keyboard')) {
+    function build_payment_keyboard(int $payId, int $amount, array $member): array {
+        return payment_build_payment_keyboard($payId, $amount, $member);
+    }
 }

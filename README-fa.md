@@ -191,3 +191,17 @@ Then rerun installer repair.
 sudo bash /var/www/mahsabot/mahsabot.sh
 ```
 Then choose `2) Update/repair existing install`.
+
+### /start repeats continuously
+If `/start` keeps repeating:
+- Update source and run repair:
+```bash
+cd /var/www/mahsabot && git pull
+sudo bash /var/www/mahsabot/mahsabot.sh
+```
+Choose `2) Update/repair existing install`.
+- Check webhook:
+```bash
+curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+```
+Make sure `last_error_message` is empty.

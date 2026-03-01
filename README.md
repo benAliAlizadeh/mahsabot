@@ -282,3 +282,23 @@ If certificate is issued but Certbot cannot enable redirect enhancement automati
 sudo bash /var/www/mahsabot/mahsabot.sh
 ```
 Then choose `2) Update/repair existing install`.
+
+### `/start` repeats continuously
+
+If `/start` keeps sending the same welcome message again and again:
+- This usually means a PHP fatal error happened after the first response, so Telegram retried the same update.
+- Update to latest code and run repair:
+  ```bash
+  cd /var/www/mahsabot && git pull
+  sudo bash /var/www/mahsabot/mahsabot.sh
+  ```
+  Choose `2) Update/repair existing install`.
+- Check webhook status:
+  ```bash
+  curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+  ```
+  Confirm `last_error_message` is empty.
+- Check web server error log for any fatal details:
+  ```bash
+  tail -n 200 /var/log/apache2/mahsabot_error.log
+  ```

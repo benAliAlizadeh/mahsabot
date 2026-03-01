@@ -205,7 +205,7 @@ function handle_select_package(int $packageId): void {
     $discountAmount = 0;
     $discountLabel  = '';
     if (!empty($temp['coupon_code'])) {
-        $coupon = validate_coupon($temp['coupon_code'], $price);
+        $coupon = purchase_validate_coupon($temp['coupon_code'], $price);
         if ($coupon) {
             $discountAmount = $coupon['discount'];
             $discountLabel  = "\n🎫 تخفیف: -" . format_price($discountAmount);
@@ -258,7 +258,7 @@ function handle_select_package(int $packageId): void {
         $details .= "\n✅ نهایی: " . format_price($finalPrice);
     }
 
-    $keyboard = build_payment_keyboard($payId, $finalPrice, $member);
+    $keyboard = purchase_build_payment_keyboard($payId, $finalPrice, $member);
     $keyboard[] = [['text' => $btn['apply_discount'] ?? '🎫 کد تخفیف', 'callback_data' => 'applyDiscount' . $payId]];
     $keyboard[] = [['text' => $btn['back'] ?? '🔙 بازگشت', 'callback_data' => 'selectGroup' . $groupId]];
 
@@ -267,7 +267,7 @@ function handle_select_package(int $packageId): void {
 
 // ─── Payment Methods Keyboard Builder ───────────────────────────────────────────
 
-function build_payment_keyboard(int $payId, int $price, array $member): array {
+function purchase_build_payment_keyboard(int $payId, int $price, array $member): array {
     global $db, $btn;
 
     $options = esi_get_options($db, 'GATEWAY_KEYS');
@@ -326,7 +326,7 @@ function handle_enter_discount(int $payId, string $code): void {
     // Account for agent qty
     $agentQty = max(1, (int)$tx['agent_qty']);
 
-    $coupon = validate_coupon($code, $originalPrice);
+    $coupon = purchase_validate_coupon($code, $originalPrice);
     if (!$coupon) {
         tg_send('❌ کد تخفیف نامعتبر یا منقضی شده.');
         return;
@@ -342,7 +342,7 @@ function handle_enter_discount(int $payId, string $code): void {
     );
 
     // Mark coupon as used by this user
-    mark_coupon_used($coupon['coupon']['id'], $fromId);
+    purchase_mark_coupon_used($coupon['coupon']['id'], $fromId);
 
     // Update temp
     $temp = json_decode($member['temp_data'] ?? '{}', true);
@@ -364,7 +364,7 @@ function handle_enter_discount(int $payId, string $code): void {
  * Validate a coupon code against schema: esi_coupons
  *   code, type(percent/fixed), amount(INT), max_uses, used_by(TEXT JSON array), active(TINYINT), expires_at(INT)
  */
-function validate_coupon(string $code, int $price): ?array {
+function purchase_validate_coupon(string $code, int $price): ?array {
     global $db, $fromId;
 
     $coupon = esi_fetch_one($db,
@@ -411,7 +411,7 @@ function validate_coupon(string $code, int $price): ?array {
 /**
  * Mark a coupon as used by a specific user (append to used_by JSON array)
  */
-function mark_coupon_used(int $couponId, int $userId): void {
+function purchase_mark_coupon_used(int $couponId, int $userId): void {
     global $db;
 
     $coupon = esi_fetch_one($db, "SELECT used_by FROM esi_coupons WHERE id = ?", 'i', $couponId);
@@ -430,7 +430,7 @@ function mark_coupon_used(int $couponId, int $userId): void {
 /**
  * Reverse coupon usage when a transaction is cancelled
  */
-function reverse_coupon_usage(string $code, int $userId): void {
+function purchase_reverse_coupon_usage(string $code, int $userId): void {
     global $db;
 
     $coupon = esi_fetch_one($db, "SELECT * FROM esi_coupons WHERE code = ?", 's', $code);
@@ -547,7 +547,7 @@ function handle_custom_confirm(string $input): void {
 
     esi_set_step($db, $fromId, 'idle');
 
-    $keyboard   = build_payment_keyboard($payId, (int)($temp['final_price'] ?? 0), $member);
+    $keyboard   = purchase_build_payment_keyboard($payId, (int)($temp['final_price'] ?? 0), $member);
     $keyboard[] = [['text' => '❌ لغو', 'callback_data' => 'cancelTransaction' . $payId]];
 
     tg_send('✅ پلن سفارشی ایجاد شد. روش پرداخت را انتخاب کنید:', json_encode([
@@ -714,7 +714,7 @@ function handle_test_account(): void {
 
 // ─── Cancel Transaction ─────────────────────────────────────────────────────────
 
-function handle_cancel_transaction(int $payId): void {
+function purchase_handle_cancel_transaction(int $payId): void {
     global $db, $fromId, $msgId, $msg;
 
     $tx = esi_fetch_one($db,
@@ -733,7 +733,7 @@ function handle_cancel_transaction(int $payId): void {
     $member = esi_get_member($db, $fromId);
     $temp   = json_decode($member['temp_data'] ?? '{}', true);
     if (!empty($temp['coupon_code'])) {
-        reverse_coupon_usage($temp['coupon_code'], $fromId);
+        purchase_reverse_coupon_usage($temp['coupon_code'], $fromId);
     }
 
     tg_edit($msgId, '❌ تراکنش لغو شد.', json_encode([

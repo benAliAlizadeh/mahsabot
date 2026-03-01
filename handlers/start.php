@@ -35,6 +35,7 @@ if (preg_match('/^\/[Ss]tart/', $text) || $text === $btn['back_main'] || $data =
         }
         tg_send($msg['welcome_message'], $mainKeys);
     }
+    exit();
 }
 
 // ── Send message to user (admin) ────────────────────────────────

@@ -371,7 +371,7 @@ function handle_renew_with_package(int $packageId, int $subId): void {
         'tron_amount'    => 0,
     ]);
 
-    $rows = build_payment_keyboard($payId, (int)$pkg['price'], $member);
+    $rows = payment_build_payment_keyboard($payId, (int)$pkg['price'], $member);
     $rows[] = [['text' => '❌ انصراف', 'callback_data' => 'cancelTx' . $payId]];
 
     tg_edit($msgId,
@@ -542,7 +542,7 @@ function handle_buy_addon_day(int $addonId, int $subId): void {
         'iiiis', $fromId, $subId, $addonId, $payId, time()
     );
 
-    $rows = build_payment_keyboard($payId, (int)$addon['price'], $member);
+    $rows = payment_build_payment_keyboard($payId, (int)$addon['price'], $member);
     $rows[] = [['text' => '❌ انصراف', 'callback_data' => 'cancelTx' . $payId]];
 
     tg_edit($msgId, "⏱ *افزایش {$addon['days']} روز*\n💰 " . format_price((int)$addon['price']) . "\n\nروش پرداخت:",
@@ -600,7 +600,7 @@ function handle_buy_addon_volume(int $addonId, int $subId): void {
         'iiiis', $fromId, $subId, $addonId, $payId, time()
     );
 
-    $rows = build_payment_keyboard($payId, (int)$addon['price'], $member);
+    $rows = payment_build_payment_keyboard($payId, (int)$addon['price'], $member);
     $rows[] = [['text' => '❌ انصراف', 'callback_data' => 'cancelTx' . $payId]];
 
     tg_edit($msgId, "📊 *افزایش " . format_traffic((float)$addon['volume_gb']) . "*\n💰 " . format_price((int)$addon['price']) . "\n\nروش پرداخت:",
@@ -617,7 +617,7 @@ function handle_show_qr(int $subId): void {
 
     $link = $sub['connect_link'] ?? '';
     if (empty($link)) {
-        $link = build_subscription_link_for_user($db, $subId);
+        $link = payment_build_subscription_link_for_user($db, $subId);
     }
 
     if (empty($link)) {
@@ -625,7 +625,7 @@ function handle_show_qr(int $subId): void {
         return;
     }
 
-    $qrPath = generate_qr_code_for_sub($link, $subId);
+    $qrPath = payment_generate_qr_code_for_sub($link, $subId);
 
     if ($qrPath && file_exists($qrPath)) {
         tg_photo(new \CURLFile($qrPath), "📱 QR Code اشتراک #{$subId}\n\nبا اپ VPN اسکن کنید.", null, 'MarkDown');

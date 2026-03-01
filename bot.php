@@ -9,6 +9,35 @@
 
 require_once __DIR__ . '/core/bootstrap.php';
 
+// Log fatal runtime errors so webhook retry loops can be diagnosed quickly.
+register_shutdown_function(static function (): void {
+    $lastError = error_get_last();
+    if (!$lastError) {
+        return;
+    }
+    $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+    if (!in_array($lastError['type'], $fatalTypes, true)) {
+        return;
+    }
+    $updateId = '';
+    if (isset($GLOBALS['update']) && is_object($GLOBALS['update']) && isset($GLOBALS['update']->update_id)) {
+        $updateId = (string)$GLOBALS['update']->update_id;
+    }
+    $fromId = (string)($GLOBALS['fromId'] ?? '');
+    $callback = (string)($GLOBALS['data'] ?? '');
+    $text = (string)($GLOBALS['text'] ?? '');
+    error_log(
+        'MahsaBot fatal webhook error'
+        . ' update=' . $updateId
+        . ' from=' . $fromId
+        . ' callback=' . $callback
+        . ' text=' . $text
+        . ' file=' . ($lastError['file'] ?? '')
+        . ' line=' . ($lastError['line'] ?? '')
+        . ' message=' . ($lastError['message'] ?? '')
+    );
+});
+
 // Security: Validate request comes from Telegram (mode-aware)
 $ipValidationReason = '';
 if (php_sapi_name() !== 'cli' && !validate_telegram_ip($ipValidationReason)) {
@@ -97,6 +126,24 @@ foreach ($handlers as $handler) {
     $handlerPath = __DIR__ . '/handlers/' . $handler;
     if (file_exists($handlerPath)) {
         require_once $handlerPath;
+    }
+}
+
+// Backward-compatible alias for legacy calls that used the old shared name.
+if (!function_exists('handle_cancel_transaction')) {
+    function handle_cancel_transaction(int $payId): void {
+        global $data;
+        if (strpos((string)$data, 'cancelTransaction') === 0 && function_exists('purchase_handle_cancel_transaction')) {
+            purchase_handle_cancel_transaction($payId);
+            return;
+        }
+        if (function_exists('payment_handle_cancel_transaction')) {
+            payment_handle_cancel_transaction($payId);
+            return;
+        }
+        if (function_exists('purchase_handle_cancel_transaction')) {
+            purchase_handle_cancel_transaction($payId);
+        }
     }
 }
 
