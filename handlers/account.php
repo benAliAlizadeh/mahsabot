@@ -11,6 +11,97 @@
 
 if (!defined('ESI_BOT_TOKEN')) exit('No direct access.');
 
+// Callback routes
+if ($data === 'myServices') {
+    handle_my_services();
+    exit();
+}
+
+if (preg_match('/^myServicesPage(\d+)$/', (string)$data, $m)) {
+    handle_my_services(max(1, (int)$m[1]));
+    exit();
+}
+
+if (preg_match('/^orderDetails(\d+)$/', (string)$data, $m)) {
+    handle_order_details((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^refreshConfig(\d+)$/', (string)$data, $m)) {
+    handle_refresh_config((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^showQR(\d+)$/', (string)$data, $m)) {
+    handle_show_qr((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^renewService(\d+)$/', (string)$data, $m)) {
+    handle_renew_service((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^renewPkg(\d+)_(\d+)$/', (string)$data, $m)) {
+    handle_renew_with_package((int)$m[1], (int)$m[2]);
+    exit();
+}
+
+if (preg_match('/^renewLink(\d+)$/', (string)$data, $m)) {
+    handle_renew_link((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^increaseDay(\d+)$/', (string)$data, $m)) {
+    handle_increase_day((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^buyAddonDay(\d+)_(\d+)$/', (string)$data, $m)) {
+    handle_buy_addon_day((int)$m[1], (int)$m[2]);
+    exit();
+}
+
+if (preg_match('/^increaseVolume(\d+)$/', (string)$data, $m)) {
+    handle_increase_volume((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^buyAddonVol(\d+)_(\d+)$/', (string)$data, $m)) {
+    handle_buy_addon_volume((int)$m[1], (int)$m[2]);
+    exit();
+}
+
+if (preg_match('/^switchLocation(\d+)$/', (string)$data, $m)) {
+    handle_switch_location((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^confirmSwitch(\d+)_(\d+)$/', (string)$data, $m)) {
+    handle_confirm_switch((int)$m[1], (int)$m[2]);
+    exit();
+}
+
+if (preg_match('/^enableConfig(\d+)$/', (string)$data, $m)) {
+    handle_enable_config((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^disableConfig(\d+)$/', (string)$data, $m)) {
+    handle_disable_config((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^deleteMyConfig(\d+)$/', (string)$data, $m)) {
+    handle_delete_my_config((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^confirmDeleteConfig(\d+)$/', (string)$data, $m)) {
+    handle_confirm_delete_config((int)$m[1]);
+    exit();
+}
+
 // ─── My Services (List Subscriptions) ───────────────────────────────────────────
 
 function handle_my_services(int $page = 1): void {

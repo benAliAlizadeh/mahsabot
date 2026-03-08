@@ -23,10 +23,8 @@ $refCode = trim($_GET['ref'] ?? '');
 
 if (empty($gateway) || empty($refCode)) { show_result(false, 'پارامترهای نامعتبر'); }
 
-// Load options
-$optRows = esi_fetch_all($db, "SELECT `option_key`, `option_value` FROM `esi_options`");
-$opts = [];
-foreach ($optRows as $r) { $opts[$r['option_key']] = $r['option_value']; }
+// Load payment options with backward-compatible aliases.
+$opts = esi_get_options($db, 'GATEWAY_KEYS');
 
 // Look up transaction
 $tx = esi_fetch_one($db, "SELECT * FROM `esi_transactions` WHERE `ref_code` = ?", 's', $refCode);
@@ -51,7 +49,7 @@ switch ($gateway) {
                 'cache_wsdl' => WSDL_CACHE_NONE,
             ]);
             $result = $client->PaymentVerification([
-                'MerchantID' => $opts['zarinpalKey'] ?? '',
+                'MerchantID' => $opts['zarinpal_merchant'] ?? ($opts['zarinpalKey'] ?? ($opts['zarinpal'] ?? '')),
                 'Authority'  => $authority,
                 'Amount'     => $rials,
             ]);
@@ -72,7 +70,7 @@ switch ($gateway) {
         if (empty($transId)) { show_result(false, 'شناسه تراکنش نامعتبر'); }
 
         $resp = http_post('https://nextpay.org/nx/gateway/verify', [
-            'api_key'  => $opts['nextpayKey'] ?? '',
+            'api_key'  => $opts['nextpay_api_key'] ?? ($opts['nextpayKey'] ?? ($opts['nextpay'] ?? '')),
             'trans_id' => $transId,
             'amount'   => $rials,
         ]);
@@ -93,7 +91,7 @@ switch ($gateway) {
             $invoiceId = $tx['gateway_ref'] ?? '';
             if (!empty($invoiceId)) {
                 $resp = http_get('https://api.nowpayments.io/v1/payment/?invoiceId=' . $invoiceId, [
-                    'x-api-key: ' . ($opts['nowpayKey'] ?? ''),
+                    'x-api-key: ' . ($opts['nowpay_api_key'] ?? ($opts['nowpayKey'] ?? ($opts['nowpayment'] ?? ''))),
                 ]);
                 $data = json_decode($resp, true);
                 $payments = $data['data'] ?? [];
@@ -129,7 +127,7 @@ switch ($gateway) {
     case 'weswap':
         $exchangeId = $tx['gateway_ref'] ?? '';
         if (!empty($exchangeId)) {
-            $resp = http_get("https://changeto.technology/api/exchange/status/{$exchangeId}?api_key=" . ($opts['weswapKey'] ?? ''));
+            $resp = http_get("https://changeto.technology/api/exchange/status/{$exchangeId}?api_key=" . ($opts['weswap_key'] ?? ($opts['weswapKey'] ?? '')));
             $data = json_decode($resp, true);
 
             if (($data['status'] ?? '') === 'confirmed' || ($data['status'] ?? '') === 'completed') {

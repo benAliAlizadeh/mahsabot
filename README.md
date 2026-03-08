@@ -113,7 +113,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/benAliAlizadeh/mahsabot/main
 
 6. **Set webhook:**
    ```bash
-   curl "https://api.telegram.org/botYOUR_TOKEN/setWebhook?url=https://yourdomain.com/bot.php"
+   curl -G "https://api.telegram.org/botYOUR_TOKEN/setWebhook" \
+     --data-urlencode "url=https://yourdomain.com/bot.php" \
+     --data-urlencode 'allowed_updates=["message","callback_query","inline_query","chosen_inline_result"]'
    ```
 
 7. **Setup cron jobs:**
@@ -144,6 +146,7 @@ mahsabot/
 │   └── middleware.php      # Spam, channel lock, phone verification
 ├── handlers/
 │   ├── start.php           # /start, main menu, profile
+│   ├── inline.php          # Inline mode query answers
 │   ├── admin.php           # Admin panel & settings
 │   ├── purchase.php        # Purchase flow
 │   ├── payment.php         # Payment processing
@@ -250,7 +253,7 @@ Repair in place (no data loss):
    ```bash
    curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
    ```
-   Then send `/start` to the bot.
+   Confirm `last_error_message` is empty and `allowed_updates` contains `callback_query` and `inline_query`, then send `/start` to the bot.
 
 Security note:
 - If a real bot token was exposed in logs or chats, rotate it in `@BotFather`.
@@ -297,7 +300,7 @@ If `/start` keeps sending the same welcome message again and again:
   ```bash
   curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
   ```
-  Confirm `last_error_message` is empty.
+  Confirm `last_error_message` is empty and `allowed_updates` includes `callback_query` and `inline_query`.
 - Check web server error log for any fatal details:
   ```bash
   tail -n 200 /var/log/apache2/mahsabot_error.log

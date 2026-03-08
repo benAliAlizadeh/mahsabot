@@ -30,16 +30,14 @@ $amount = (int)$tx['amount']; // Toman
 $rials  = $amount * 10;       // Rials for gateways
 $desc   = 'پرداخت MahsaBot - #' . $tx['id'];
 
-// Load payment keys from options
-$optRows = esi_fetch_all($db, "SELECT `option_key`, `option_value` FROM `esi_options`");
-$opts = [];
-foreach ($optRows as $r) { $opts[$r['option_key']] = $r['option_value']; }
-
-$callbackUrl = ESI_BOT_URL . 'gateway/callback.php?gateway=' . $gateway . '&ref=' . $token;
+// Load payment keys via compatibility aliases.
+$opts = esi_get_options($db, 'GATEWAY_KEYS');
+$baseUrl = rtrim((string)ESI_BOT_URL, '/') . '/';
+$callbackUrl = $baseUrl . 'gateway/callback.php?gateway=' . $gateway . '&ref=' . $token;
 
 switch ($gateway) {
     case 'zarinpal':
-        $merchantId = $opts['zarinpalKey'] ?? '';
+        $merchantId = $opts['zarinpal_merchant'] ?? ($opts['zarinpalKey'] ?? ($opts['zarinpal'] ?? ''));
         if (empty($merchantId)) { show_error('درگاه زرین‌پال پیکربندی نشده'); }
 
         try {
@@ -72,7 +70,7 @@ switch ($gateway) {
         break;
 
     case 'nextpay':
-        $apiKey = $opts['nextpayKey'] ?? '';
+        $apiKey = $opts['nextpay_api_key'] ?? ($opts['nextpayKey'] ?? ($opts['nextpay'] ?? ''));
         if (empty($apiKey)) { show_error('درگاه NextPay پیکربندی نشده'); }
 
         $postData = [
@@ -96,7 +94,7 @@ switch ($gateway) {
         break;
 
     case 'nowpay':
-        $apiKey = $opts['nowpayKey'] ?? '';
+        $apiKey = $opts['nowpay_api_key'] ?? ($opts['nowpayKey'] ?? ($opts['nowpayment'] ?? ''));
         if (empty($apiKey)) { show_error('درگاه NowPayments پیکربندی نشده'); }
 
         $postData = json_encode([
@@ -105,8 +103,8 @@ switch ($gateway) {
             'order_id'          => $token,
             'order_description' => $desc,
             'ipn_callback_url'  => $callbackUrl,
-            'success_url'       => ESI_BOT_URL . 'gateway/callback.php?gateway=nowpay&ref=' . $token . '&status=success',
-            'cancel_url'        => ESI_BOT_URL . 'gateway/callback.php?gateway=nowpay&ref=' . $token . '&status=cancel',
+            'success_url'       => $baseUrl . 'gateway/callback.php?gateway=nowpay&ref=' . $token . '&status=success',
+            'cancel_url'        => $baseUrl . 'gateway/callback.php?gateway=nowpay&ref=' . $token . '&status=cancel',
         ]);
 
         $resp = http_post('https://api.nowpayments.io/v1/invoice', $postData, [
@@ -125,7 +123,7 @@ switch ($gateway) {
         break;
 
     case 'weswap':
-        $apiKey = $opts['weswapKey'] ?? '';
+        $apiKey = $opts['weswap_key'] ?? ($opts['weswapKey'] ?? '');
         if (empty($apiKey)) { show_error('درگاه WeSwap پیکربندی نشده'); }
 
         $postData = json_encode([

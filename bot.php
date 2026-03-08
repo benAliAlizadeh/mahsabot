@@ -98,6 +98,15 @@ if ($fromId != ESI_ADMIN_ID && ($member['is_admin'] ?? 0) != 1) {
 // Process referral
 process_referral($db, $fromId, $text, $member);
 
+// Inline query updates must bypass message/callback step routers.
+if (($updateType ?? '') === 'inline_query') {
+    $inlineHandlerPath = __DIR__ . '/handlers/inline.php';
+    if (file_exists($inlineHandlerPath)) {
+        require_once $inlineHandlerPath;
+    }
+    exit();
+}
+
 // ─── Handler Dispatch ───────────────────────────────────────────
 // Each handler file checks its own conditions and handles accordingly.
 // Handlers exit() when they've processed the request, or fall through.
@@ -108,6 +117,7 @@ $isAdmin = ($fromId == ESI_ADMIN_ID || ($member['is_admin'] ?? 0) == 1);
 // Handler files - order matters for step-based handlers
 $handlers = [
     'start.php',      // /start, main menu, back to main
+    'inline.php',     // Inline mode answers
     'admin.php',      // Admin panel, settings, reports
     'server.php',     // Server management (admin)
     'category.php',   // Category management (admin)

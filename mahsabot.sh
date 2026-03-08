@@ -567,9 +567,13 @@ set_webhook() {
 
     local webhook_url
     webhook_url="${BOT_URL}bot.php"
+    local allowed_updates
+    allowed_updates='["message","callback_query","inline_query","chosen_inline_result"]'
 
     local set_result
-    set_result="$(curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${webhook_url}" || true)"
+    set_result="$(curl -fsS -G "https://api.telegram.org/bot${BOT_TOKEN}/setWebhook" \
+        --data-urlencode "url=${webhook_url}" \
+        --data-urlencode "allowed_updates=${allowed_updates}" || true)"
     echo "[WEBHOOK setWebhook] ${set_result}" >>"${INSTALL_LOG}"
     if ! echo "${set_result}" | grep -q '"ok":true'; then
         abort "setWebhook failed: ${set_result}"
@@ -582,14 +586,23 @@ set_webhook() {
     if echo "${info_result}" | grep -q '"ok":true'; then
         local actual_url
         local last_error
+        local allowed_reported
         actual_url="$(echo "${info_result}" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')"
         last_error="$(echo "${info_result}" | sed -n 's/.*"last_error_message":"\([^"]*\)".*/\1/p')"
+        allowed_reported="$(echo "${info_result}" | sed -n 's/.*"allowed_updates":\[\([^]]*\)\].*/\1/p')"
 
         log_info "Webhook info url: ${actual_url:-unknown}"
         if [[ -n "${last_error}" ]]; then
             log_warn "Telegram webhook last_error_message: ${last_error}"
         else
             log_info "Telegram reports no webhook error."
+        fi
+        if echo "${allowed_reported}" | grep -q '"callback_query"' && \
+           echo "${allowed_reported}" | grep -q '"inline_query"' && \
+           echo "${allowed_reported}" | grep -q '"chosen_inline_result"'; then
+            log_info "Webhook allowed_updates verified: ${allowed_reported}"
+        else
+            log_warn "Webhook allowed_updates missing expected entries. Reported: ${allowed_reported:-none}"
         fi
     else
         log_warn "Could not read getWebhookInfo response: ${info_result}"

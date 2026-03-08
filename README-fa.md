@@ -99,7 +99,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/benAliAlizadeh/mahsabot/main
 
 5. **تنظیم Webhook:**
    ```bash
-   curl "https://api.telegram.org/botTOKEN/setWebhook?url=https://domain.com/bot.php"
+   curl -G "https://api.telegram.org/botTOKEN/setWebhook" \
+     --data-urlencode "url=https://domain.com/bot.php" \
+     --data-urlencode 'allowed_updates=["message","callback_query","inline_query","chosen_inline_result"]'
    ```
 
 6. **تنظیم Cron:**
@@ -162,7 +164,7 @@ MIT — فایل [LICENSE](LICENSE) را ببینید.
    ```bash
    curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
    ```
-   ??? ?? ?????? `/start` ???????.
+   Make sure `last_error_message` is empty and `allowed_updates` contains `callback_query` and `inline_query`, then test `/start`.
 
 ???? ??????:
 - ??? ???? ????? ???? ???? ??? ?? ?? ????? ???? ???? ?? ?? ?? `@BotFather` ??? ????.
@@ -204,4 +206,4 @@ Choose `2) Update/repair existing install`.
 ```bash
 curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 ```
-Make sure `last_error_message` is empty.
+Make sure `last_error_message` is empty and `allowed_updates` includes `callback_query` and `inline_query`.

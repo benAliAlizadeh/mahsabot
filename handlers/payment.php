@@ -16,6 +16,124 @@
 
 if (!defined('ESI_BOT_TOKEN')) exit('No direct access.');
 
+// Callback routes
+if (preg_match('/^payWithBalance(\d+)$/', (string)$data, $m) || preg_match('/^payBalance(\d+)$/', (string)$data, $m)) {
+    handle_pay_with_balance((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^payWithCart(\d+)$/', (string)$data, $m) || preg_match('/^payCart(\d+)$/', (string)$data, $m)) {
+    handle_pay_with_cart((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^payWithTron(\d+)$/', (string)$data, $m) || preg_match('/^payTron(\d+)$/', (string)$data, $m)) {
+    handle_pay_with_tron((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^payOnline(\d+)$/', (string)$data, $m)) {
+    handle_pay_online((int)$m[1], null);
+    exit();
+}
+
+if (preg_match('/^payOnline_(zarinpal|nextpay)_(\d+)$/', (string)$data, $m)) {
+    handle_pay_online((int)$m[2], (string)$m[1]);
+    exit();
+}
+
+if (preg_match('/^approveCart(\d+)$/', (string)$data, $m)) {
+    handle_approve_cart((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^declineCart(\d+)$/', (string)$data, $m)) {
+    handle_decline_cart((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^cancelTx(\d+)$/', (string)$data, $m)) {
+    payment_handle_cancel_transaction((int)$m[1]);
+    exit();
+}
+
+// Step routes (message-only)
+if ($data === '' && preg_match('/^uploadCartReceipt_(\d+)$/', (string)$step, $m)) {
+    handle_cart_receipt_upload((int)$m[1]);
+    exit();
+}
+
+if ($data === '' && preg_match('/^enterTronTxid_(\d+)$/', (string)$step, $m) && $text !== $btn['cancel']) {
+    handle_tron_txid_submit((int)$m[1], $text);
+    exit();
+}
+
+function handle_pay_online(int $payId, ?string $forcedGateway = null): void {
+    global $db, $fromId, $msgId;
+
+    $tx = esi_fetch_one($db,
+        "SELECT * FROM esi_transactions WHERE id = ? AND member_id = ? AND status = 'pending'",
+        'ii', $payId, $fromId
+    );
+    if (!$tx) {
+        tg_alert('❌ تراکنش یافت نشد.');
+        return;
+    }
+
+    $keys = esi_get_options($db, 'GATEWAY_KEYS');
+    $available = [];
+    if (!empty($keys['zarinpal_merchant'])) $available[] = 'zarinpal';
+    if (!empty($keys['nextpay_api_key'])) $available[] = 'nextpay';
+
+    if ($forcedGateway !== null) {
+        if (!in_array($forcedGateway, $available, true)) {
+            tg_alert('❌ این درگاه فعال نیست.');
+            return;
+        }
+
+        $baseUrl = rtrim((string)ESI_BOT_URL, '/');
+        $payUrl = $baseUrl . '/gateway/initiate.php?token=' . urlencode((string)$tx['ref_code']) . '&gateway=' . urlencode($forcedGateway);
+        $gatewayTitle = $forcedGateway === 'zarinpal' ? 'زرین‌پال' : 'نکست‌پی';
+
+        $keyboard = json_encode(['inline_keyboard' => [
+            [['text' => '🔗 پرداخت با ' . $gatewayTitle, 'url' => $payUrl]],
+            [['text' => '❌ انصراف', 'callback_data' => 'cancelTx' . $payId]],
+        ]]);
+
+        $text = "💳 *پرداخت آنلاین*\n\n"
+              . "💰 مبلغ: " . format_price((int)$tx['amount']) . "\n"
+              . "🔢 کد پیگیری: #{$payId}\n\n"
+              . "برای ادامه پرداخت روی دکمه زیر بزنید.";
+        tg_edit($msgId, $text, $keyboard, 'MarkDown');
+        return;
+    }
+
+    if (empty($available)) {
+        tg_alert('❌ هیچ درگاه آنلاینی پیکربندی نشده است.');
+        return;
+    }
+
+    if (count($available) === 1) {
+        handle_pay_online($payId, $available[0]);
+        return;
+    }
+
+    $rows = [];
+    foreach ($available as $gateway) {
+        $title = $gateway === 'zarinpal' ? '💳 زرین‌پال' : '💳 نکست‌پی';
+        $rows[] = [['text' => $title, 'callback_data' => 'payOnline_' . $gateway . '_' . $payId]];
+    }
+    $rows[] = [['text' => '❌ انصراف', 'callback_data' => 'cancelTx' . $payId]];
+
+    tg_edit($msgId,
+        "💳 *انتخاب درگاه آنلاین*\n\n"
+        . "💰 مبلغ: " . format_price((int)$tx['amount']) . "\n"
+        . "🔢 کد پیگیری: #{$payId}",
+        json_encode(['inline_keyboard' => $rows]),
+        'MarkDown'
+    );
+}
+
 // ─── Pay With Wallet Balance ────────────────────────────────────────────────────
 
 function handle_pay_with_balance(int $payId): void {

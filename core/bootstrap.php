@@ -55,9 +55,10 @@ $rawInput = file_get_contents('php://input');
 $update = json_decode($rawInput);
 
 // Extract update fields
-$messageData = [];
+$messageData = ['update_type' => 'unknown'];
 if (isset($update->message)) {
     $messageData = [
+        'update_type' => 'message',
         'from_id'    => $update->message->from->id,
         'text'       => $update->message->text ?? '',
         'first_name' => htmlspecialchars($update->message->from->first_name ?? ''),
@@ -94,6 +95,7 @@ if (isset($update->message)) {
 
 if (isset($update->callback_query)) {
     $messageData = array_merge($messageData, [
+        'update_type' => 'callback_query',
         'callback_id' => $update->callback_query->id,
         'callback'     => $update->callback_query->data,
         'text'         => $update->callback_query->message->text ?? '',
@@ -107,10 +109,41 @@ if (isset($update->callback_query)) {
     ]);
 }
 
+if (isset($update->inline_query)) {
+    $messageData = array_merge($messageData, [
+        'update_type'         => 'inline_query',
+        'from_id'             => $update->inline_query->from->id,
+        'first_name'          => htmlspecialchars($update->inline_query->from->first_name ?? ''),
+        'username'            => htmlspecialchars($update->inline_query->from->username ?? 'Ù†Ø¯Ø§Ø±Ø¯'),
+        'inline_query_id'     => $update->inline_query->id ?? '',
+        'inline_query_text'   => $update->inline_query->query ?? '',
+        'inline_query_offset' => $update->inline_query->offset ?? '',
+        'inline_chat_type'    => $update->inline_query->chat_type ?? '',
+    ]);
+}
+
+if (isset($update->chosen_inline_result)) {
+    $messageData = array_merge($messageData, [
+        'update_type'       => 'chosen_inline_result',
+        'from_id'           => $update->chosen_inline_result->from->id,
+        'first_name'        => htmlspecialchars($update->chosen_inline_result->from->first_name ?? ''),
+        'username'          => htmlspecialchars($update->chosen_inline_result->from->username ?? 'Ù†Ø¯Ø§Ø±Ø¯'),
+        'inline_result_id'  => $update->chosen_inline_result->result_id ?? '',
+        'inline_query_text' => $update->chosen_inline_result->query ?? '',
+    ]);
+}
+
+// Keep username stable for DB inserts/logging when Telegram username is missing or malformed.
+$parsedUsername = (string)($messageData['username'] ?? '');
+if (!preg_match('/^[A-Za-z0-9_]{5,32}$/', $parsedUsername)) {
+    $messageData['username'] = 'unknown';
+}
+
 // Skip group/channel messages
 if (($messageData['from_id'] ?? 0) < 0) exit();
 
 // Global shortcuts
+$updateType = $messageData['update_type'] ?? 'unknown';
 $fromId    = $messageData['from_id'] ?? 0;
 $text      = $messageData['text'] ?? '';
 $data      = $messageData['callback'] ?? '';
@@ -118,6 +151,10 @@ $msgId     = $messageData['message_id'] ?? 0;
 $callbackId = $messageData['callback_id'] ?? '';
 $firstName = $messageData['first_name'] ?? '';
 $username  = $messageData['username'] ?? '';
+$inlineQueryId = $messageData['inline_query_id'] ?? '';
+$inlineQueryText = $messageData['inline_query_text'] ?? '';
+$inlineQueryOffset = $messageData['inline_query_offset'] ?? '';
+$inlineChatType = $messageData['inline_chat_type'] ?? '';
 
 // Load user info
 $member = esi_get_member($db, $fromId);

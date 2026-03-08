@@ -96,6 +96,32 @@ function tg_alert(string $text, bool $showAlert = false, string $overrideCallbac
 }
 
 /**
+ * Answer an inline query.
+ */
+function tg_answer_inline(
+    string $inlineQueryId,
+    array $results,
+    int $cacheTime = 1,
+    bool $isPersonal = true,
+    string $nextOffset = '',
+    ?array $button = null
+) {
+    $params = [
+        'inline_query_id' => $inlineQueryId,
+        'results'         => json_encode($results, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        'cache_time'      => $cacheTime,
+        'is_personal'     => $isPersonal,
+    ];
+    if ($nextOffset !== '') {
+        $params['next_offset'] = $nextOffset;
+    }
+    if ($button !== null) {
+        $params['button'] = json_encode($button, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+    return tg_request('answerInlineQuery', $params);
+}
+
+/**
  * Send a photo
  */
 function tg_photo($photo, string $caption = null, $keyboard = null, string $parse = 'MarkDown', $chatId = null) {

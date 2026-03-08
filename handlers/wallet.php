@@ -12,6 +12,83 @@
 
 if (!defined('ESI_BOT_TOKEN')) exit('No direct access.');
 
+// Callback routes
+if ($data === 'chargeWallet') {
+    handle_charge_wallet();
+    exit();
+}
+
+if (preg_match('/^walletAmount(\d+)$/', (string)$data, $m)) {
+    handle_wallet_amount((int)$m[1]);
+    exit();
+}
+
+if ($data === 'walletCustomAmount') {
+    handle_wallet_custom_amount();
+    exit();
+}
+
+if (preg_match('/^walletPayCart(\d+)$/', (string)$data, $m)) {
+    handle_wallet_pay_cart((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^walletPayTron(\d+)$/', (string)$data, $m)) {
+    handle_wallet_pay_tron((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^walletPayOnline_(zarinpal|nextpay)_(\d+)$/', (string)$data, $m)) {
+    handle_wallet_pay_online((string)$m[1], (int)$m[2]);
+    exit();
+}
+
+if (preg_match('/^approveWallet(\d+)$/', (string)$data, $m)) {
+    handle_approve_wallet((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^declineWallet(\d+)$/', (string)$data, $m)) {
+    handle_decline_wallet((int)$m[1]);
+    exit();
+}
+
+if ($data === 'transferBalance') {
+    handle_transfer_balance();
+    exit();
+}
+
+if ($data === 'confirmTransfer') {
+    handle_confirm_transfer();
+    exit();
+}
+
+// Step routes (message-only)
+if ($data === '' && $step === 'enterWalletAmount' && $text !== $btn['cancel']) {
+    handle_wallet_amount_input($text);
+    exit();
+}
+
+if ($data === '' && preg_match('/^uploadWalletReceipt_(\d+)$/', (string)$step, $m)) {
+    handle_wallet_receipt_upload((int)$m[1]);
+    exit();
+}
+
+if ($data === '' && preg_match('/^enterWalletTronTxid_(\d+)$/', (string)$step, $m) && $text !== $btn['cancel']) {
+    handle_wallet_tron_txid_submit((int)$m[1], $text);
+    exit();
+}
+
+if ($data === '' && $step === 'enterTransferUserId' && $text !== $btn['cancel']) {
+    handle_transfer_user_id_input($text);
+    exit();
+}
+
+if ($data === '' && $step === 'enterTransferAmount' && $text !== $btn['cancel']) {
+    handle_transfer_amount_input($text);
+    exit();
+}
+
 // ─── Charge Wallet Entry ────────────────────────────────────────────────────────
 
 function handle_charge_wallet(): void {
@@ -475,6 +552,51 @@ function handle_confirm_transfer(): void {
  * Build payment method keyboard for wallet transactions.
  * (Wallet balance not shown since we're charging the wallet itself)
  */
+function handle_wallet_pay_online(string $gateway, int $payId): void {
+    global $db, $fromId, $msgId;
+
+    if (!in_array($gateway, ['zarinpal', 'nextpay'], true)) {
+        tg_alert('Invalid gateway.');
+        return;
+    }
+
+    $tx = esi_fetch_one($db,
+        "SELECT * FROM esi_transactions WHERE id = ? AND member_id = ? AND status = 'pending' AND tx_type = 'INCREASE_WALLET'",
+        'ii', $payId, $fromId
+    );
+    if (!$tx) {
+        tg_alert('Transaction not found.');
+        return;
+    }
+
+    $payKeys = esi_get_options($db, 'GATEWAY_KEYS');
+    $gatewayConfigured = $gateway === 'zarinpal'
+        ? !empty($payKeys['zarinpal_merchant'])
+        : !empty($payKeys['nextpay_api_key']);
+    if (!$gatewayConfigured) {
+        tg_alert('Gateway is not configured.');
+        return;
+    }
+
+    $baseUrl = rtrim((string)ESI_BOT_URL, '/');
+    $payUrl = $baseUrl . '/gateway/initiate.php?token=' . urlencode((string)$tx['ref_code']) . '&gateway=' . urlencode($gateway);
+
+    $gatewayTitle = $gateway === 'zarinpal' ? 'Zarinpal' : 'NextPay';
+    $keyboard = json_encode(['inline_keyboard' => [
+        [['text' => 'Open ' . $gatewayTitle, 'url' => $payUrl]],
+        [['text' => 'Cancel', 'callback_data' => 'cancelTx' . $payId]],
+    ]]);
+
+    tg_edit($msgId,
+        "*Online wallet payment*\n\n"
+        . "Amount: " . format_price((int)$tx['amount']) . "\n"
+        . "Transaction: #{$payId}\n\n"
+        . "Use the button below to continue.",
+        $keyboard,
+        'MarkDown'
+    );
+}
+
 function build_wallet_payment_keys(int $payId): array {
     global $db;
 

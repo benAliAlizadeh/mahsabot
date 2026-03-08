@@ -31,6 +31,83 @@
 
 if (!defined('ESI_BOT_TOKEN')) exit('No direct access.');
 
+// Callback routes
+if ($data === 'buyService') {
+    handle_buy_service();
+    exit();
+}
+
+if (preg_match('/^selectNode(\d+)$/', (string)$data, $m)) {
+    handle_select_node((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^selectGroup(\d+)$/', (string)$data, $m)) {
+    handle_select_group((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^selectPackage(\d+)$/', (string)$data, $m)) {
+    handle_select_package((int)$m[1]);
+    exit();
+}
+
+if (preg_match('/^applyDiscount(\d+)$/', (string)$data, $m)) {
+    handle_apply_discount((int)$m[1]);
+    exit();
+}
+
+if ($data === 'customPlan') {
+    handle_custom_plan();
+    exit();
+}
+
+if ($data === 'getTestService') {
+    handle_test_account();
+    exit();
+}
+
+if ($data === 'agentSingleBuy' || $data === 'agentSingle') {
+    handle_agent_single();
+    exit();
+}
+
+if ($data === 'agentBulkBuy' || $data === 'agentBulk') {
+    handle_agent_bulk();
+    exit();
+}
+
+if (preg_match('/^cancelTransaction(\d+)$/', (string)$data, $m)) {
+    purchase_handle_cancel_transaction((int)$m[1]);
+    exit();
+}
+
+// Step routes (message-only)
+if ($data === '' && preg_match('/^enterDiscount_?(\d+)$/', (string)$step, $m) && $text !== '' && $text !== $btn['cancel']) {
+    handle_enter_discount((int)$m[1], $text);
+    exit();
+}
+
+if ($data === '' && $step === 'customDays' && $text !== $btn['cancel']) {
+    handle_custom_days($text);
+    exit();
+}
+
+if ($data === '' && $step === 'customVolume' && $text !== $btn['cancel']) {
+    handle_custom_volume($text);
+    exit();
+}
+
+if ($data === '' && $step === 'customConfirm' && $text !== $btn['cancel']) {
+    handle_custom_confirm($text);
+    exit();
+}
+
+if ($data === '' && $step === 'agentBulkCount' && $text !== $btn['cancel']) {
+    handle_agent_bulk_count($text);
+    exit();
+}
+
 // ─── Buy Service Entry Point ───────────────────────────────────────────────────
 
 function handle_buy_service(): void {
